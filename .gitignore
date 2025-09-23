@@ -31,7 +31,7 @@ dist/
 .env.*
 
 # --- Data outputs ---
-recommendations*.csv
+attractions*.csv
 *.parquet
 *.xlsx
 *.db
