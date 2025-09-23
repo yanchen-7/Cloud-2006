@@ -1,0 +1,45 @@
+# --- Python basics ---
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.so
+
+# --- Virtual environments ---
+.venv/
+env/
+venv/
+ENV/
+
+# --- Build & packaging ---
+build/
+dist/
+*.egg-info/
+.eggs/
+
+# --- Jupyter / IPython ---
+.ipynb_checkpoints/
+*.ipynb_convert/
+
+# --- Logs & temp files ---
+*.log
+*.tmp
+*.swp
+
+# --- Secrets ---
+.env
+.env.*
+
+# --- Data outputs ---
+recommendations*.csv
+*.parquet
+*.xlsx
+*.db
+
+# --- System files ---
+.DS_Store
+Thumbs.db
+
+# --- VS Code settings (optional) ---
+.vscode/
+.history/
