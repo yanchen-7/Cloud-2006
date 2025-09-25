@@ -1,0 +1,63 @@
+﻿{% extends "base.html" %}
+{% block title %}Profile - Places Explorer{% endblock %}
+
+{% block content %}
+<section class="profile-wrapper">
+    <div class="profile-card">
+        <h1><i class="fas fa-user-circle"></i> Your Profile</h1>
+        <p class="auth-subtitle">Update your personal information. Changes are saved to the configured database.</p>
+        <form method="post" action="{{ url_for('profile') }}" class="auth-form" novalidate>
+            <div class="form-grid">
+                <div class="form-field">
+                    <label>Username</label>
+                    <input type="text" value="{{ user.username }}" readonly>
+                </div>
+                <div class="form-field">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" required value="{{ user.email }}">
+                </div>
+                <div class="form-field">
+                    <label for="gender">Gender</label>
+                    <select id="gender" name="gender">
+                        <option value="" {% if not user.gender %}selected{% endif %}>Prefer not to say</option>
+                        <option value="Female" {% if user.gender == 'Female' %}selected{% endif %}>Female</option>
+                        <option value="Male" {% if user.gender == 'Male' %}selected{% endif %}>Male</option>
+                        <option value="Non-binary" {% if user.gender == 'Non-binary' %}selected{% endif %}>Non-binary</option>
+                        <option value="Other" {% if user.gender == 'Other' %}selected{% endif %}>Other</option>
+                    </select>
+                </div>
+                <div class="form-field">
+                    <label for="date_of_birth">Date of Birth</label>
+                    <input type="date" id="date_of_birth" name="date_of_birth" value="{{ user.date_of_birth.isoformat() if user.date_of_birth else '' }}">
+                </div>
+                <div class="form-field">
+                    <label for="mobile_number">Mobile Number</label>
+                    <input type="tel" id="mobile_number" name="mobile_number" value="{{ user.mobile_number or '' }}">
+                </div>
+                <div class="form-field">
+                    <label for="country_of_origin">Country of Origin</label>
+                    <input type="text" id="country_of_origin" name="country_of_origin" value="{{ user.country_of_origin or '' }}">
+                </div>
+            </div>
+
+            <fieldset class="password-fields">
+                <legend>Reset Password <span>(optional)</span></legend>
+                <div class="form-grid">
+                    <div class="form-field">
+                        <label for="password">New Password</label>
+                        <input type="password" id="password" name="password" placeholder="Leave blank to keep current password">
+                    </div>
+                    <div class="form-field">
+                        <label for="confirm_password">Confirm Password</label>
+                        <input type="password" id="confirm_password" name="confirm_password" placeholder="Re-enter new password">
+                    </div>
+                </div>
+            </fieldset>
+
+            <div class="form-actions">
+                <button type="submit" class="btn primary">Save Changes</button>
+            </div>
+        </form>
+    </div>
+</section>
+{% endblock %}

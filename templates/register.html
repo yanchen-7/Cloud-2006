@@ -1,0 +1,57 @@
+﻿{% extends "base.html" %}
+{% block title %}Sign Up - Places Explorer{% endblock %}
+
+{% block content %}
+<section class="auth-wrapper">
+    <div class="auth-card">
+        <h1><i class="fas fa-user-plus"></i> Create Your Account</h1>
+        <p class="auth-subtitle">Register to sync your preferences. Details are stored via the configured database endpoint (SQLite by default, RDS when DATABASE_URL is provided).</p>
+        <form method="post" action="{{ url_for('register') }}" class="auth-form" novalidate>
+            <div class="form-grid">
+                <div class="form-field">
+                    <label for="username">Username</label>
+                    <input type="text" id="username" name="username" required placeholder="Pick a unique username">
+                </div>
+                <div class="form-field">
+                    <label for="email">Email</label>
+                    <input type="email" id="email" name="email" required placeholder="name@example.com">
+                </div>
+                <div class="form-field">
+                    <label for="password">Password</label>
+                    <input type="password" id="password" name="password" required placeholder="Minimum 8 characters">
+                </div>
+                <div class="form-field">
+                    <label for="confirm_password">Confirm Password</label>
+                    <input type="password" id="confirm_password" name="confirm_password" required placeholder="Re-enter password">
+                </div>
+                <div class="form-field">
+                    <label for="gender">Gender</label>
+                    <select id="gender" name="gender">
+                        <option value="">Prefer not to say</option>
+                        <option value="Female">Female</option>
+                        <option value="Male">Male</option>
+                        <option value="Non-binary">Non-binary</option>
+                        <option value="Other">Other</option>
+                    </select>
+                </div>
+                <div class="form-field">
+                    <label for="date_of_birth">Date of Birth</label>
+                    <input type="date" id="date_of_birth" name="date_of_birth">
+                </div>
+                <div class="form-field">
+                    <label for="mobile_number">Mobile Number</label>
+                    <input type="tel" id="mobile_number" name="mobile_number" placeholder="e.g. +65 8123 4567">
+                </div>
+                <div class="form-field">
+                    <label for="country_of_origin">Country of Origin</label>
+                    <input type="text" id="country_of_origin" name="country_of_origin" placeholder="e.g. Singapore">
+                </div>
+            </div>
+            <div class="form-actions">
+                <button type="submit" class="btn primary">Sign Up</button>
+            </div>
+        </form>
+        <p class="auth-footer">Already registered? <a href="{{ url_for('login') }}" class="link">Login instead</a>.</p>
+    </div>
+</section>
+{% endblock %}
