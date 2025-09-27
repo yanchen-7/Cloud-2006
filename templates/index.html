@@ -1,6 +1,7 @@
 {% extends "base.html" %}
 
 {% block title %}Discover Singapore - Welcome to Garden City{% endblock %}
+{% block page_id %}home{% endblock %}
 
 {% block content %}
 <section class="top-row">
@@ -50,25 +51,33 @@
 </section>
 
 <section class="map-section">
-    <aside class="place-panel" id="placePanel">
-        <div class="panel-header">
-            <h2><i class="fas fa-info-circle"></i> Place Details</h2>
-        </div>
+    <aside class="place-panel is-collapsed" id="placePanel">
         <div class="panel-body">
-            <p class="panel-placeholder">Select a category and tap on a pin to see the full breakdown.</p>
+            <div class="panel-placeholder" id="placePlaceholder">
+                <i class="fas fa-hand-pointer"></i>
+                <p>Select a place on the map to view full details, opening hours and reviews.</p>
+            </div>
             <div class="place-details" id="placeDetails" hidden>
-                <h3 id="placeName">--</h3>
-                <div class="place-meta">
-                    <span id="placeCategory" class="badge muted">--</span>
-                    <span id="placeRating" class="badge"><i class="fas fa-star"></i> --</span>
-                    <span id="placeReviews" class="badge muted"><i class="fas fa-users"></i> --</span>
-                    <span id="placePrice" class="badge price" hidden><i class="fas fa-dollar-sign"></i></span>
-                    <span id="placeDistance" class="badge muted" hidden><i class="fas fa-route"></i></span>
-                </div>
+                <header class="place-header">
+                    <div class="place-header-text">
+                        <h3 id="placeName">--</h3>
+                        <div class="place-meta">
+                            <span id="placeCategory" class="badge muted">--</span>
+                            <span id="placeRating" class="badge rating"><i class="fas fa-star"></i> --</span>
+                            <span id="placeReviewsCount" class="badge muted"><i class="fas fa-users"></i> --</span>
+                            <span id="placePrice" class="badge price" hidden><i class="fas fa-dollar-sign"></i></span>
+                            <span id="placeDistance" class="badge muted" hidden><i class="fas fa-route"></i></span>
+                        </div>
+                    </div>
+                    <button id="savePlace" class="icon-btn" type="button" aria-pressed="false" title="Save this place">
+                        <i class="far fa-star"></i>
+                    </button>
+                </header>
+
                 <dl class="place-data">
                     <div>
                         <dt>Status</dt>
-                        <dd id="placeStatus"><span class="badge status" data-state="unknown">Unknown</span></dd>
+                        <dd><span id="placeStatus" class="badge status">Status unknown</span></dd>
                     </div>
                     <div>
                         <dt>Address</dt>
@@ -89,56 +98,63 @@
                         </dd>
                     </div>
                 </dl>
-                <div class="save-comment">
-                    <button id="savePlace" class="btn star-btn" aria-pressed="false" title="Save this place">
-                        <i class="far fa-star"></i> Save
-                    </button>
-                    <div class="comment-box">
-                        <textarea id="commentText" rows="3" placeholder="Share your thoughts..."></textarea>
-                        <button id="postComment" class="btn ghost"><i class="fas fa-paper-plane"></i> Post</button>
+
+                <section class="place-reviews" aria-labelledby="placeReviewsTitle">
+                    <div class="section-heading">
+                        <h4 id="placeReviewsTitle"><i class="fas fa-star-half-alt"></i> Visitor Reviews</h4>
+                        <span class="badge muted" id="placeReviewsSummary">--</span>
                     </div>
-                    <div class="comments-list" id="commentsList"></div>
-                </div>
+                    <div class="reviews-stack" id="placeReviewsList"></div>
+                    <button id="placeReviewsToggle" class="btn ghost" type="button" hidden>Show more reviews</button>
+                </section>
+
+                <section class="user-review" aria-labelledby="userReviewTitle">
+                    <h4 id="userReviewTitle"><i class="fas fa-pen-to-square"></i> Share Your Experience</h4>
+                    <form id="userReviewForm" novalidate>
+                        <div class="form-row">
+                            <label for="reviewerName">Name</label>
+                            <input id="reviewerName" name="reviewerName" type="text" maxlength="80" placeholder="Optional" autocomplete="name">
+                        </div>
+                        <div class="form-row">
+                            <label for="reviewerRating">Rating</label>
+                            <select id="reviewerRating" name="reviewerRating" required>
+                                <option value="">Select...</option>
+                                <option value="5">5 - Excellent</option>
+                                <option value="4">4 - Good</option>
+                                <option value="3">3 - Decent</option>
+                                <option value="2">2 - Below average</option>
+                                <option value="1">1 - Poor</option>
+                            </select>
+                        </div>
+                        <div class="form-row">
+                            <label for="reviewerText">Review</label>
+                            <textarea id="reviewerText" name="reviewerText" rows="3" maxlength="1000" required placeholder="Share your thoughts (min 10 characters)..."></textarea>
+                        </div>
+                        <div class="form-actions">
+                            <span id="reviewFormMessage" class="form-message" role="status" aria-live="polite"></span>
+                            <button type="submit" class="btn primary"><i class="fas fa-paper-plane"></i> Submit</button>
+                        </div>
+                    </form>
+                </section>
             </div>
         </div>
     </aside>
 
     <div class="map-wrapper">
         <div class="map-toolbar">
-            <button id="locateMe" class="btn ghost"><i class="fas fa-location-arrow"></i> Re-centre on Me</button>
+            <button id="locateMe" class="btn ghost" type="button"><i class="fas fa-location-arrow"></i> Re-centre on Me</button>
             <label for="categorySelect" class="sr-only">Select a category</label>
             <select id="categorySelect" class="category-select"></select>
-            <span class="toolbar-text" id="placeCount">Explore up to 10 places per category. Share location to personalise results.</span>
-            <button id="refreshData" class="btn ghost"><i class="fas fa-sync"></i> Refresh Data</button>
+            <span class="toolbar-text" id="placeCount">Choose a category and share your location for the best matches.</span>
+            <button id="refreshData" class="btn ghost" type="button"><i class="fas fa-sync"></i> Refresh Data</button>
         </div>
-        <div id="map" class="map"></div>
+        <div class="map-hint" id="mapHint"><i class="fas fa-info-circle"></i> Share your location and tap a pin to see place details.</div>
+        <div id="map" class="map" role="region" aria-label="Singapore map"></div>
         <div class="map-legend">
             <span><i class="fas fa-location-crosshairs"></i> You</span>
             <span><i class="fas fa-map-marker-alt"></i> Selected Places</span>
         </div>
     </div>
-</section>
-
-<section id="reviews" class="card reviews">
-    <div class="card-header">
-        <div>
-            <h2><i class="fas fa-comments"></i> Ratings & Comments</h2>
-            <p>Community notes saved locally on your device.</p>
-        </div>
-    </div>
-    <div class="reviews-body">
-        <div id="reviewsList" class="reviews-list"></div>
-    </div>
-    </section>
-
-<section id="saved" class="card saved">
-    <div class="card-header">
-        <div>
-            <h2><i class="fas fa-bookmark"></i> Saved Places</h2>
-            <p>Your bookmarked places (stored locally).</p>
-        </div>
-    </div>
-    <div id="savedList" class="saved-list"></div>
 </section>
 
 <section class="card data-viz">
@@ -152,4 +168,20 @@
         <canvas id="ratingsChart" height="120"></canvas>
     </div>
 </section>
+
+<section class="card reviews">
+    <div class="card-header">
+        <div>
+            <h2><i class="fas fa-comments"></i> Recent Reviews</h2>
+            <p>Latest visitor reviews from our places database.</p>
+        </div>
+    </div>
+    <div class="reviews-body">
+        <div class="reviews-list" id="reviewsList">
+            <div class="empty">Loading reviews...</div>
+        </div>
+    </div>
+</section>
 {% endblock %}
+
+

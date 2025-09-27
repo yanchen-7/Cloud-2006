@@ -15,7 +15,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     {% block extra_head %}{% endblock %}
 </head>
-<body>
+<body data-page="{% block page_id %}home{% endblock %}">
     <header class="site-header">
         <div class="header-inner">
             <a class="brand" href="{{ url_for('index') }}">
@@ -25,14 +25,12 @@
             <nav class="primary-nav" aria-label="Primary">
                 <ul>
                     <li><a href="{{ url_for('index') }}">Home</a></li>
-                    <li><a href="#saved" id="navSaved">Saved</a></li>
-                    <li><a href="#reviews" id="navReviews">Ratings & Comments</a></li>
+                    <li><a href="{{ url_for('explore') }}">Explore Places</a></li>
                     {% if current_user.is_authenticated %}
                         <li><a href="{{ url_for('profile') }}">Profile</a></li>
                         <li><a href="{{ url_for('logout') }}">Logout</a></li>
                     {% else %}
                         <li><a class="login-link" href="{{ url_for('login') }}">Login</a></li>
-                        <li><a class="signup-link" href="{{ url_for('register') }}">Sign Up</a></li>
                     {% endif %}
                 </ul>
             </nav>
@@ -59,7 +57,7 @@
         <p>Data provided by <a href="https://data.gov.sg" target="_blank" rel="noopener noreferrer">Data.gov.sg</a></p>
     </footer>
 
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="{{ url_for('static', filename='js/data.js') }}"></script>
     <script src="{{ url_for('static', filename='js/app.js') }}" defer></script>
     {% block scripts %}{% endblock %}
 </body>

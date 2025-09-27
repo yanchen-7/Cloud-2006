@@ -54,6 +54,9 @@ def load_user(user_id):
 @app.route("/")
 def index() -> str:
     return render_template("index.html")
+@app.route("/explore")
+def explore() -> str:
+    return render_template("explore.html")
 
 
 @app.route("/csv")
@@ -174,3 +177,4 @@ if __name__ == "__main__":
     with app.app_context():
         db.create_all()
     app.run(debug=True)
+
