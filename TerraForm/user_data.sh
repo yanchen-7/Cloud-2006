@@ -1,38 +1,19 @@
 #!/bin/bash
-# Install web server, PHP (for DB/S3 connection testing), and MariaDB client
-sudo dnf update -y
-sudo dnf install -y httpd wget php-fpm php-mysqli php-json php php-devel
 
-# No need to install mariadb105-server on the web server, only client is needed
-# sudo dnf install -y mariadb105-server # Not needed on web server
-sudo dnf install -y mariadb105-client # Install client for RDS connection test
+# Update and install necessary packages
+sudo yum update -y
+sudo yum install -y python3-pip nano git nginx
 
-# Configure and Start HTTPD
-sudo systemctl enable httpd
-sudo systemctl start httpd
+# Create a directory for the web application
+sudo mkdir -p /var/www/html/
+sudo chown -R ec2-user:ec2-user /var/www/html
 
-# Set permissions
-sudo usermod -a -G apache ec2-user
-sudo chown -R ec2-user:apache /var/www
-sudo chmod 2775 /var/www
-find /var/www -type d -exec sudo chmod 2775 {} \;
-find /var/www -type f -exec sudo chmod 0664 {} \;
+# --- Enable Password Authentication for SSH ---
+# WARNING: This is not recommended for production environments. Key-based auth is more secure.
+sudo sed -i 's/^PasswordAuthentication no/PasswordAuthentication yes/g' /etc/ssh/sshd_config
 
-# Create a test index.html with S3/RDS reference (for verification)
-# The RDS_ENDPOINT and S3_BUCKET are templated in by Terraform
-S3_BUCKET="${s3_bucket_name}"
-RDS_ENDPOINT="${rds_endpoint}"
-AWS_REGION="${aws_region}"
+# Set a password for the ec2-user. CHANGE THIS to a strong, unique password.
+echo "ec2-user:${ec2_user_password}" | sudo chpasswd
 
-echo '<html>
-            <head><title>Cloud-2006 Web Server</title></head>
-            <body>
-              <h1>Cloud-2006 Web Server (Cloud-2006)</h1>
-              <h2>Data Source Access Check</h2>
-              <p><strong>RDS Endpoint:</strong> '$RDS_ENDPOINT'</p>
-              <p><strong>S3 Bucket:</strong> s3://'$S3_BUCKET'</p>
-              <p><strong>AWS Region:</strong> '$AWS_REGION'</p>
-              <p>A simple check to verify EC2 is running and can reference its resources.</p>
-              <p>Actual S3/RDS connectivity requires app code (PHP/Python) to fully utilize the IAM role and database connection.</p>
-            </body>
-        </html>' | sudo tee /var/www/html/index.html
+# Restart the SSH service to apply changes
+sudo systemctl restart sshd

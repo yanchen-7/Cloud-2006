@@ -43,3 +43,7 @@ Thumbs.db
 # --- VS Code settings (optional) ---
 .vscode/
 .history/
+
+# --- Terraform ---
+Terraform/.terraform
+cloud-2006-key.pem
