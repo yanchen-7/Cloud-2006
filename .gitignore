@@ -5,11 +5,7 @@ __pycache__/
 *.pyd
 *.so
 
-# --- Virtual environments ---
-.venv/
-env/
-venv/
-ENV/
+
 
 # --- Build & packaging ---
 build/
@@ -26,9 +22,7 @@ dist/
 *.tmp
 *.swp
 
-# --- Secrets ---
-.env
-.env.*
+
 
 # --- Data outputs ---
 attractions*.csv

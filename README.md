@@ -1,6 +1,6 @@
 # Cloud-2006
 
-Tourism points-of-interest explorer now ships as a PHP application backed by MySQL.
+Tourism points-of-interest explorer now ships as a PHP application backed by MySQL. A new Node.js (Express) + React implementation is added alongside PHP; Terraform remains unchanged.
 
 ## Getting Started
 
@@ -28,7 +28,28 @@ Tourism points-of-interest explorer now ships as a PHP application backed by MyS
    password = super_secret_password
    ```
    The file is read with `parse_ini_file`, so keep it accessible to the web user only.
-3. **Serve the site** ? from the project root run `php -S localhost:8000` (or deploy behind Apache/Nginx pointing to `index.php`).
+3. **Serve the PHP site** ? from the project root run `php -S localhost:8000` (or deploy behind Apache/Nginx pointing to `index.php`).
+
+## Node.js + React (New)
+
+### Backend (Express)
+
+```
+cd backend
+cp .env.example .env   # set DB_HOST, DB_PORT, DB_USER, DB_PASSWORD, DB_NAME, SESSION_SECRET
+npm install
+npm run dev
+# API at http://localhost:3001/api
+```
+
+### Frontend (React + Vite)
+
+```
+cd frontend
+npm install
+npm run dev
+# App at http://localhost:5173 (proxied to /api)
+```
 
 ## Application Structure
 
@@ -36,15 +57,17 @@ Tourism points-of-interest explorer now ships as a PHP application backed by MyS
 - `includes/` ? shared bootstrap, database, auth, flash messaging, and rendering helpers.
 - `templates/` ? PHP view files (`layout.php`, `home.php`, `explore.php`, etc.).
 - `static/` ? existing JavaScript, CSS, and assets. `/csv` streams `singapore_data_with_category.csv` for the frontend map components.
+- `backend/` ? Express server exposing `/api/session`, `/api/places`, `/api/favourites`, `/api/reviews`, `/api/weather`.
+- `frontend/` ? React (Vite) app replicating Home/Explore/Auth/Profile pages.
 
 ## Authentication & Profiles
 
 - Registration, login, logout, profile updates, and password changes now run against MySQL.
-- Sessions and flash messages are PHP-native; password hashes use `password_hash()`/`password_verify()`.
+- Sessions and flash messages are PHP-native; password hashes use `password_hash()`/`password_verify()`. Node uses `express-session` and `bcryptjs`.
 - `require_login()` enforces authentication for protected pages (profile, logout).
 
 ## Notes
 
 - Legacy Flask code and the local SQLite database have been removed; Python utilities used for data prep are still available in case they are needed offline.
 - Ensure your web server prevents direct access to `/var/www/private` while keeping it readable by PHP.
-- Update DNS/virtual host rules so that `/static` continues to be served directly to avoid routing through PHP for assets.
+- Update DNS/virtual host rules so that `/static` continues to be served directly to avoid routing through PHP for assets. For Node/React dev, Vite serves assets.

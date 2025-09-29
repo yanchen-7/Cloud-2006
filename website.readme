@@ -1,0 +1,9 @@
+When user opens the website, the main page have a nav bar showing home, explore, log in. below that is recommendation of the day where it is a 
+sliding window showing 5 recommeded business base on ratings from different category. beside that will be a dynamic interactive weather dashboard 
+the data is taken from data.gov.sg showing temperature, psi and rainfall of the location that user have select on the map below or current location./ 
+below that will be a map using osm leaflet showing the user current location with a drop pin. have the re-center on me, the filter options and refresh data. 
+there will be 5 random business shown on the map and when user clicks on the business, the place detail will show up on the left side. the place details contains
+information such as name, address, rating, counts, price, distance, status base on opening hours, telephone, website, opeing hours, reviews (show 5 and allow user to read more)
+if user is not logged in, disale save and post review function. user logged in will be able to post reviews and save the location.
+in the explore page, user is able to see the top rated (max 20) of the category choses and at the same time able to view the saved location. when user clicks on 
+to the drop pin, the place detail will be shown. 
