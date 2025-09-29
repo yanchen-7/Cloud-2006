@@ -52,7 +52,37 @@ resource "aws_instance" "web_server_dev" {
   vpc_security_group_ids = [aws_security_group.web_sg.id]
   iam_instance_profile   = aws_iam_instance_profile.ec2_profile.name
 
-  # user_data is no longer needed as we will use a pre-configured AMI.
+  # This script runs on the first boot to set up the PHP environment.
+  user_data = <<-EOF
+              #!/bin/bash
+              # Update all packages
+              yum update -y
+
+              # Install web server, PHP, Python and other dependencies
+              yum install -y httpd php php-mysqlnd python3-pip
+
+              # Install Composer (PHP dependency manager)
+              curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+
+              # Start and enable Apache
+              systemctl start httpd
+              systemctl enable httpd
+
+              # --- Set up user permissions for web development ---
+              # Add the ec2-user to the 'apache' group
+              usermod -a -G apache ec2-user
+
+              # Set ownership and permissions on the web root for group collaboration
+              mkdir -p /var/www/private # Ensure private directory exists
+              chown -R root:apache /var/www
+              chmod 2775 /var/www
+              # Use + for more efficient execution
+              find /var/www -type d -exec chmod 2775 {} +
+              find /var/www -type f -exec chmod 0664 {} +
+
+              # Restore the default SELinux security context for the web root
+              restorecon -R -v /var/www/
+              EOF
 
   tags = {
     Name = "${var.project_name}-web-server-dev"

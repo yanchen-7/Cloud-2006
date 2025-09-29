@@ -47,3 +47,5 @@ Thumbs.db
 # --- Terraform ---
 Terraform/.terraform
 cloud-2006-key.pem
+Terraform
+
