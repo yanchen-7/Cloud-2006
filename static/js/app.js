@@ -122,6 +122,121 @@
         reviewsExpanded: false,
         weatherCache: { fetchedAt: 0, forecast: null, rainfall: null, psi: null, temp: null },
     };
+    function updateAuthUi() {
+        if (els.saveBtn) {
+            if (!state.authenticated) {
+                els.saveBtn.setAttribute("aria-disabled", "true");
+                els.saveBtn.setAttribute("title", "Login to save places");
+                els.saveBtn.classList.remove("saved");
+            } else {
+                els.saveBtn.removeAttribute("aria-disabled");
+                els.saveBtn.setAttribute("title", "Save this place");
+                if (state.selectedPlaceId) {
+                    updateSaveButton(state.selectedPlaceId);
+                }
+            }
+        }
+
+        if (els.reviewForm) {
+            const disabled = !state.authenticated;
+            Array.from(els.reviewForm.elements).forEach(element => {
+                if (element.name !== 'reviewFormMessage') {
+                    element.disabled = disabled;
+                }
+            });
+            if (disabled) {
+                showUserMessage('Login to post a review.', 'warning');
+            }
+        }
+    }
+
+    function showUserMessage(message, tone = 'info') {
+        if (!els.reviewMessage) return;
+        els.reviewMessage.textContent = message;
+        if (!message) {
+            els.reviewMessage.removeAttribute('data-tone');
+        } else {
+            els.reviewMessage.setAttribute('data-tone', tone);
+        }
+    }
+
+    async function loadSavedPlaces({ force = false } = {}) {
+        if (!state.authenticated) {
+            state.savedPlaces = [];
+            renderSavedPlaces();
+            return;
+        }
+        if (typeof storage.listFavourites === 'function') {
+            try {
+                const result = await storage.listFavourites(force);
+                state.savedPlaces = Array.isArray(result) ? result.slice() : [];
+            } catch (error) {
+                console.error('App: failed to load favourites', error);
+                if (error && error.status === 401 && typeof storage.refreshSession === 'function') {
+                    await storage.refreshSession(true);
+                    const retry = await storage.listFavourites(true);
+                    state.savedPlaces = Array.isArray(retry) ? retry.slice() : [];
+                }
+            }
+        } else if (typeof storage.getSavedPlaces === 'function') {
+            state.savedPlaces = storage.getSavedPlaces();
+        }
+        renderSavedPlaces();
+    }
+
+    async function loadUserReviews({ force = false } = {}) {
+        if (!state.authenticated) {
+            state.userReviews = [];
+            renderGlobalReviews();
+            return;
+        }
+        if (typeof storage.listMyReviews === 'function') {
+            try {
+                const result = await storage.listMyReviews(force);
+                state.userReviews = Array.isArray(result) ? result.slice() : [];
+            } catch (error) {
+                console.error('App: failed to load user reviews', error);
+                if (error && error.status === 401 && typeof storage.refreshSession === 'function') {
+                    await storage.refreshSession(true);
+                    const retry = await storage.listMyReviews(true);
+                    state.userReviews = Array.isArray(retry) ? retry.slice() : [];
+                }
+            }
+        } else if (typeof storage.getUserReviews === 'function') {
+            state.userReviews = storage.getUserReviews();
+        }
+        renderGlobalReviews();
+    }
+
+    async function refreshAuthState({ force = false } = {}) {
+        try {
+            const session = typeof storage.getSession === 'function'
+                ? await storage.getSession({ force })
+                : { authenticated: typeof storage.isAuthenticated === 'function' ? storage.isAuthenticated() : false, user: null };
+            state.authenticated = Boolean(session && session.authenticated);
+            state.currentUser = session && session.user ? session.user : null;
+        } catch (error) {
+            console.error('App: failed to refresh session', error);
+            state.authenticated = false;
+            state.currentUser = null;
+        }
+
+        if (!state.authenticated) {
+            state.savedPlaces = [];
+            state.userReviews = [];
+            updateAuthUi();
+            renderSavedPlaces();
+            renderGlobalReviews();
+            return;
+        }
+
+        updateAuthUi();
+        await Promise.all([
+            loadSavedPlaces({ force }),
+            loadUserReviews({ force }),
+        ]);
+    }
+
 
     function isWithinSingapore(coords) {
         if (!coords) return false;
@@ -238,13 +353,14 @@
         }
         els.placeHours.innerHTML = "<li>Hours unavailable</li>";
     }
-
     function getSavedPlaces() {
-        return storage.getSavedPlaces();
+        return state.savedPlaces.slice();
     }
 
     function setSavedPlaces(list) {
-        storage.setSavedPlaces(list);
+        if (typeof storage.setSavedPlaces === 'function') {
+            storage.setSavedPlaces(list);
+        }
     }
 
     function isPlaceSaved(placeId) {
@@ -434,7 +550,7 @@
             
             row.innerHTML = `
                 <div class="title">${review.placeName || 'Unknown place'}</div>
-                <div class="sub">${review.authorName || 'Anonymous'} • ${ratingDisplay} • ${dateDisplay}</div>
+                <div class="sub">${review.authorName || 'Anonymous'} Ã¢â‚¬Â¢ ${ratingDisplay} Ã¢â‚¬Â¢ ${dateDisplay}</div>
                 <div class="text" data-full-text="${encodeURIComponent(review.text || '')}">
                     ${isTruncated ? truncatedText + '...' : review.text || 'No comment'}
                     ${isTruncated ? `<span class="expand-link" onclick="toggleReviewExpansion(this)" style="color: #007bff; cursor: pointer; text-decoration: underline;"> Read more</span>` : ''}
@@ -918,7 +1034,7 @@
         const errors = [];
 
         if (forecast) {
-            els.weatherArea.textContent = `${coords.label} � ${forecast.area}`;
+            els.weatherArea.textContent = `${coords.label} Ã¯Â¿Â½ ${forecast.area}`;
             els.weatherDescription.textContent = forecast.forecast;
             if (forecast.update) {
                 els.weatherUpdated.textContent = new Date(forecast.update).toLocaleString();
@@ -929,7 +1045,7 @@
         }
 
         if (temp) {
-            els.tempBadge.textContent = `Temp: ${temp.value?.toFixed?.(1) ?? temp.value}�C`;
+            els.tempBadge.textContent = `Temp: ${temp.value?.toFixed?.(1) ?? temp.value}°C`;
         } else {
             els.tempBadge.textContent = "Temp: --";
         }
