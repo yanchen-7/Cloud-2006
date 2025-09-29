@@ -20,9 +20,13 @@ from pathlib import Path
 from typing import Dict, Iterable, List, Optional, Sequence, Tuple
 
 try:
+    from sklearn.linear_model import LogisticRegression
+    import numpy as np
     import pymysql
 except ImportError:  # pragma: no cover - optional dependency
     pymysql = None
+    LogisticRegression = None
+    np = None
 
 DATA_PATH = Path(__file__).with_name("singapore_data_with_category.csv")
 EARTH_RADIUS_KM = 6371.0
@@ -105,46 +109,29 @@ def parse_int(value: object) -> Optional[int]:
 
 
 @dataclass(frozen=True)
+
 class Place:
+    click_id: int
+    account_id: int
+    page: str
+    element: str
+    device_type: str
+    ip_address: str
+    clicked_at: str
     place_id: str
-    name: str
-    category: str
-    latitude: float
-    longitude: float
-    rating: Optional[float]
-    rating_count: Optional[int]
-    price_level: Optional[int]
-    formatted_address: str
 
     @classmethod
     def from_row(cls, row: Dict[str, object]) -> "Place":
-        lat = parse_float(row.get("latitude"))
-        lng = parse_float(row.get("longitude"))
-        name = (row.get("name") or "").strip()
-        if lat is None or lng is None or not name:
-            raise ValueError("missing core place attributes")
-        place_id = (row.get("place_id") or f"{name}-{lat}-{lng}").strip()
-        category = (row.get("category") or "General").strip() or "General"
-        rating = parse_float(row.get("rating"))
-        rating_count = parse_int(row.get("user_ratings_total"))
-        price_level = parse_int(row.get("price_level"))
-        formatted_address = (row.get("formatted_address") or row.get("vicinity") or "").strip()
         return cls(
-            place_id=place_id,
-            name=name,
-            category=category,
-            latitude=lat,
-            longitude=lng,
-            rating=rating,
-            rating_count=rating_count,
-            price_level=price_level,
-            formatted_address=formatted_address,
+            click_id=row.get("click_id"),
+            account_id=row.get("account_id"),
+            page=row.get("page"),
+            element=row.get("element"),
+            device_type=row.get("device_type"),
+            ip_address=row.get("ip_address"),
+            clicked_at=str(row.get("clicked_at")),
+            place_id=row.get("place_id"),
         )
-
-    def matches_category(self, category: Optional[str]) -> bool:
-        if category is None:
-            return True
-        return self.category.lower() == category.lower()
 
 
 def haversine_km(lat1: float, lng1: float, lat2: float, lng2: float) -> float:
@@ -199,18 +186,17 @@ def load_places_from_mysql(
             ssl_params["key"] = str(ssl_key)
 
     table = validate_identifier(table, label="mysql-table")
+
     query = (
         "SELECT "
-        "place_id, "
-        "name, "
-        "category, "
-        "latitude, "
-        "longitude, "
-        "rating, "
-        "user_ratings_total, "
-        "price_level, "
-        "formatted_address, "
-        "vicinity "
+        "click_id, "
+        "account_id, "
+        "page, "
+        "element, "
+        "device_type, "
+        "ip_address, "
+        "clicked_at, "
+        "place_id "
         f"FROM {table}"
     )
     if limit is not None:
@@ -346,35 +332,60 @@ def serialize_place(place: Place, *, distance_km: Optional[float] = None) -> Dic
 
 
 def build_output(args: argparse.Namespace, places: Sequence[Place]):
-    if args.mode == "top":
-        items = top_places(
-            places,
-            category=args.category,
-            topk=args.topk,
-            min_reviews=args.min_reviews,
-        )
-        return [serialize_place(item) for item in items]
-    if args.mode == "nearby":
-        if args.latitude is None or args.longitude is None:
-            raise SystemExit("latitude and longitude are required for nearby mode")
-        matches = nearest_places(
-            places,
-            latitude=args.latitude,
-            longitude=args.longitude,
-            category=args.category,
-            topk=args.topk,
-            min_reviews=args.min_reviews,
-        )
-        return [serialize_place(place, distance_km=distance) for place, distance in matches]
-    picks = daily_recommendations(
-        places,
-        topk=args.topk,
-        min_reviews=args.min_reviews,
-    )
-    return [
-        {"category": category, "place": serialize_place(place)}
-        for category, place in picks
-    ]
+
+# Recommendation and prediction features
+    try:
+        from sklearn.linear_model import LogisticRegression
+        import numpy as np
+    except ImportError:
+        LogisticRegression = None
+        np = None
+
+def recommend_top(places, topk=5):
+    from collections import Counter
+    page_counter = Counter([p.page for p in places if p.page])
+    element_counter = Counter([p.element for p in places if p.element])
+    top_pages = page_counter.most_common(topk)
+    top_elements = element_counter.most_common(topk)
+    return {
+        "top_pages": top_pages,
+        "top_elements": top_elements
+    }
+
+def predict_clicks(places):
+    if LogisticRegression is None or np is None:
+        return {"error": "scikit-learn and numpy are required for prediction."}
+    X = []
+    y = []
+    device_types = list(set(p.device_type for p in places if p.device_type))
+    device_map = {d: i for i, d in enumerate(device_types)}
+    for p in places:
+        if p.device_type and p.page:
+            X.append([device_map[p.device_type], len(p.page)])
+            y.append(1)  # All are clicks
+    if not X:
+        return {"error": "Not enough data for prediction."}
+    X = np.array(X)
+    y = np.array(y)
+    # Fake negative samples for demonstration
+    X_fake = [[0, 0], [1, 1], [2, 2]]
+    y_fake = [0, 0, 0]
+    X = np.vstack([X, X_fake])
+    y = np.concatenate([y, y_fake])
+    model = LogisticRegression()
+    model.fit(X, y)
+    predictions = {}
+    for d in device_types:
+        for l in [5, 10, 20]:
+            prob = model.predict_proba([[device_map[d], l]])[0][1]
+            predictions[f"device:{d}_pagelen:{l}"] = prob
+    return predictions
+
+def build_output(args, places):
+    output = {}
+    output["recommendations"] = recommend_top(places, topk=args.topk if hasattr(args, "topk") else 5)
+    output["predictions"] = predict_clicks(places)
+    return output
 
 
 def parse_args(argv: Optional[Sequence[str]] = None) -> argparse.Namespace:
