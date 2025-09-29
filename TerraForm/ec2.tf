@@ -61,11 +61,14 @@ resource "aws_instance" "web_server_dev" {
               # Install web server, PHP, Python and other dependencies
               yum install -y httpd php php-mysqlnd python3-pip
 
-              # Install Composer (PHP dependency manager)
-              curl -sS https://getcomposer.org/installer | php -- --install-dir=/usr/local/bin --filename=composer
+              # --- Install Composer (more robust method) ---
+              # Download the installer to a temporary location
+              curl -sS https://getcomposer.org/installer -o /tmp/composer-setup.php
+              # Execute the installer and place composer in /usr/local/bin
+              php /tmp/composer-setup.php --install-dir=/usr/local/bin --filename=composer
 
               # Start and enable Apache
-              systemctl start httpd
+              systemctl restart httpd # Use restart to ensure it picks up any new configs
               systemctl enable httpd
 
               # --- Set up user permissions for web development ---
@@ -79,6 +82,11 @@ resource "aws_instance" "web_server_dev" {
               # Use + for more efficient execution
               find /var/www -type d -exec chmod 2775 {} +
               find /var/www -type f -exec chmod 0664 {} +
+
+              # --- Install PHP dependencies with Composer ---
+              # Navigate to the web root and install the AWS SDK for PHP
+              # Run this command as the 'apache' user to ensure correct file ownership in the vendor directory.
+              sudo -u apache /usr/local/bin/composer require aws/aws-sdk-php --working-dir=/var/www/html
 
               # Restore the default SELinux security context for the web root
               restorecon -R -v /var/www/
