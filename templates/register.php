@@ -1,12 +1,11 @@
-﻿{% extends "base.html" %}
-{% block title %}Sign Up - Places Explorer{% endblock %}
-
-{% block content %}
+<?php
+$pageTitle = 'Sign Up - Places Explorer';
+?>
 <section class="auth-wrapper">
     <div class="auth-card">
         <h1><i class="fas fa-user-plus"></i> Create Your Account</h1>
-        <p class="auth-subtitle">Register to sync your preferences. Details are stored via the configured database endpoint (SQLite by default, RDS when DATABASE_URL is provided).</p>
-        <form method="post" action="{{ url_for('register') }}" class="auth-form" novalidate>
+        <p class="auth-subtitle">Register to sync your preferences. Details are stored via the configured database endpoint.</p>
+        <form method="post" action="/register" class="auth-form" novalidate>
             <div class="form-grid">
                 <div class="form-field">
                     <label for="username">Username</label>
@@ -30,8 +29,6 @@
                         <option value="">Prefer not to say</option>
                         <option value="Female">Female</option>
                         <option value="Male">Male</option>
-                        <option value="Non-binary">Non-binary</option>
-                        <option value="Other">Other</option>
                     </select>
                 </div>
                 <div class="form-field">
@@ -51,7 +48,6 @@
                 <button type="submit" class="btn primary">Sign Up</button>
             </div>
         </form>
-        <p class="auth-footer">Already registered? <a href="{{ url_for('login') }}" class="link">Login instead</a>.</p>
+        <p class="auth-footer">Already registered? <a href="/login" class="link">Login instead</a>.</p>
     </div>
 </section>
-{% endblock %}

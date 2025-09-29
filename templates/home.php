@@ -1,9 +1,7 @@
-{% extends "base.html" %}
-
-{% block title %}Discover Singapore - Welcome to Garden City{% endblock %}
-{% block page_id %}home{% endblock %}
-
-{% block content %}
+<?php
+$pageTitle = 'Discover Singapore - Welcome to Garden City';
+$pageId = 'home';
+?>
 <section class="top-row">
     <div class="card recommendations">
         <div class="card-header">
@@ -182,6 +180,3 @@
         </div>
     </div>
 </section>
-{% endblock %}
-
-

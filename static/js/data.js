@@ -120,10 +120,10 @@
     function extractReviews(row, placeId) {
         const reviews = [];
         for (let i = 1; i <= 5; i += 1) {
-            const author = row[`review${i}__author_name`];
-            const rating = toNumber(row[`review${i}__rating`]);
-            const dateRaw = row[`review${i}__exact_date`];
-            const text = row[`review${i}__text`];
+            const author = row[`review_${i}_author_name`];
+            const rating = toNumber(row[`review_${i}_rating`]);
+            const dateRaw = row[`review_${i}_exact_date`];
+            const text = row[`review_${i}_text`];
             if (!author && !text) continue;
             reviews.push({
                 id: `${placeId}-seed-${i}`,
@@ -176,21 +176,53 @@
         if (cachedPlaces) {
             return Promise.resolve(cachedPlaces);
         }
-        return new Promise((resolve, reject) => {
-            Papa.parse("/csv", {
-                download: true,
-                header: true,
-                dynamicTyping: true,
-                skipEmptyLines: true,
-                complete: results => {
-                    const rows = results?.data || [];
-                    const places = rows.map(normalizePlace).filter(Boolean);
-                    cachedPlaces = places;
-                    resolve(places);
-                },
-                error: err => reject(err),
+        
+        return fetch('/api/places')
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(places => {
+                // Transform database data to match the expected format
+                const normalizedPlaces = places.map(place => {
+                    // Add any missing fields and normalize the structure
+                    return {
+                        ...place,
+                        latitude: Number(place.latitude),
+                        longitude: Number(place.longitude),
+                        rating: place.rating ? Number(place.rating) : null,
+                        user_ratings_total: place.user_ratings_total ? Number(place.user_ratings_total) : 0,
+                        price_level: place.price_level ? Number(place.price_level) : null,
+                        vicinity: place.vicinity || place.formatted_address || '',
+                        phone: place.international_phone_number || '',
+                        types: place.types || [],
+                        reviews: [], // Reviews will be loaded separately from the database
+                    };
+                });
+                cachedPlaces = normalizedPlaces;
+                return normalizedPlaces;
+            })
+            .catch(error => {
+                console.error('Failed to load places from API:', error);
+                // Fallback to CSV if API fails
+                return new Promise((resolve, reject) => {
+                    Papa.parse("./singapore_data_with_category.csv", {
+                        download: true,
+                        header: true,
+                        dynamicTyping: true,
+                        skipEmptyLines: true,
+                        complete: results => {
+                            const rows = results?.data || [];
+                            const places = rows.map(normalizePlace).filter(Boolean);
+                            cachedPlaces = places;
+                            resolve(places);
+                        },
+                        error: err => reject(err),
+                    });
+                });
             });
-        });
     }
 
     function haversine(lat1, lng1, lat2, lng2) {

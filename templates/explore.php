@@ -1,9 +1,8 @@
-{% extends "base.html" %}
-
-{% block title %}Explore Places - Discover Singapore{% endblock %}
-{% block page_id %}explore{% endblock %}
-
-{% block content %}
+<?php
+$pageTitle = 'Explore Places - Discover Singapore';
+$pageId = 'explore';
+$extraScripts = '<script src="/static/js/explore.js" defer></script>';
+?>
 <section class="explore-hero">
     <div class="card">
         <div class="card-header">
@@ -63,8 +62,3 @@
         </div>
     </div>
 </aside>
-{% endblock %}
-
-{% block scripts %}
-<script src="{{ url_for('static', filename='js/explore.js') }}" defer></script>
-{% endblock %}
