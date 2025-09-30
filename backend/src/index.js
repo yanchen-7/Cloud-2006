@@ -8,7 +8,7 @@ import dotenv from "dotenv";
 // Load environment variables from .env file at the very top
 dotenv.config();
 
-import { pool } from "./mysql.js";
+import { init as initDB } from "./mysql.js";
 import sessionRouter from "./routes/session.js";
 import placesRouter from "./routes/places.js";
 import favouritesRouter from "./routes/favourites.js";
@@ -18,6 +18,20 @@ import weatherRouter from "./routes/weather.js";
 const app = express();
 const PORT = process.env.PORT || 3001;
 const SESSION_SECRET = process.env.SESSION_SECRET || "change-me";
+
+// Initialize the database connection pool
+initDB({
+  host: process.env.DB_HOST,
+  port: Number(process.env.DB_PORT || 3306),
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+  waitForConnections: true,
+  connectionLimit: 10,
+  namedPlaceholders: true,
+  connectTimeout: 10000,
+  ssl: "Amazon RDS",
+});
 
 // --- Serve React Frontend ---
 const __filename = fileURLToPath(import.meta.url);
@@ -33,6 +47,8 @@ app.use(session({
   cookie: { httpOnly: true, sameSite: "lax" }
 }));
 
+// Re-import pool after initialization for the health check
+import { pool } from "./mysql.js";
 app.get("/api/health", async (_req, res) => {
   try {
     await pool.query("SELECT 1");
@@ -72,4 +88,6 @@ app.use((req, res) => res.status(404).json({ error: "Not found" }));
   
 app.listen(PORT, () => {
   console.log(`Backend listening on :${PORT}`);
+  // Diagnostic log to verify environment variables are loaded
+  console.log(`Attempting to connect to DB_HOST: ${process.env.DB_HOST || "NOT SET (defaulting to localhost)"}`);
 });

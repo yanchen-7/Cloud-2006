@@ -52,4 +52,3 @@ router.delete("/:placeId", requireAuth, async (req, res) => {
 });
 
 export default router;
-
