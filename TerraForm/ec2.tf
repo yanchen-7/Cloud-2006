@@ -52,44 +52,25 @@ resource "aws_instance" "web_server_dev" {
   vpc_security_group_ids = [aws_security_group.web_sg.id]
   iam_instance_profile   = aws_iam_instance_profile.ec2_profile.name
 
-  # This script runs on the first boot to set up the PHP environment.
+  # This script runs on the first boot to set up the Node.js environment.
   user_data = <<-EOF
               #!/bin/bash
               # Update all packages
               yum update -y
 
-              # Install web server, PHP, Python and other dependencies
-              yum install -y httpd php php-mysqlnd python3-pip
+              # Install Apache (as a reverse proxy) and Git
+              yum install -y httpd git
 
-              # --- Install Composer (more robust method) ---
-              # Download the installer to a temporary location
-              curl -sS https://getcomposer.org/installer -o /tmp/composer-setup.php
-              # Execute the installer and place composer in /usr/local/bin
-              php /tmp/composer-setup.php --install-dir=/usr/local/bin --filename=composer
+              # Install Node.js v18 and npm
+              curl -sL https://rpm.nodesource.com/setup_18.x | bash -
+              yum install -y nodejs
+
+              # Install PM2 globally (a process manager for Node.js)
+              npm install pm2 -g
 
               # Start and enable Apache
-              systemctl restart httpd # Use restart to ensure it picks up any new configs
+              systemctl start httpd
               systemctl enable httpd
-
-              # --- Set up user permissions for web development ---
-              # Add the ec2-user to the 'apache' group
-              usermod -a -G apache ec2-user
-
-              # Set ownership and permissions on the web root for group collaboration
-              mkdir -p /var/www/private # Ensure private directory exists
-              chown -R root:apache /var/www
-              chmod 2775 /var/www
-              # Use + for more efficient execution
-              find /var/www -type d -exec chmod 2775 {} +
-              find /var/www -type f -exec chmod 0664 {} +
-
-              # --- Install PHP dependencies with Composer ---
-              # Navigate to the web root and install the AWS SDK for PHP
-              # Run this command as the 'apache' user to ensure correct file ownership in the vendor directory.
-              sudo -u apache /usr/local/bin/composer require aws/aws-sdk-php --working-dir=/var/www/html
-
-              # Restore the default SELinux security context for the web root
-              restorecon -R -v /var/www/
               EOF
 
   tags = {

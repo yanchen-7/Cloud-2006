@@ -87,28 +87,26 @@ export default function Home() {
     loadPlaces()
   }, [loadPlaces])
 
-  // Initialize map
-  useEffect(() => {
-    if (typeof window === 'undefined' || mapRef.current || typeof L === 'undefined') return
-    
-    try {
-      const map = L.map('map', { zoomControl: true }).setView([SENTOSA.lat, SENTOSA.lng], 13)
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 19,
-        attribution: '&copy; OpenStreetMap contributors',
-      }).addTo(map)
-      mapRef.current = map
-    } catch (error) {
-      console.error('Failed to initialize map:', error)
-    }
-    
+  // Callback ref to initialize the map safely
+  const mapContainerRef = useCallback(node => {
+    if (!node || mapRef.current || typeof L === 'undefined') return; // Ensure node exists and map is not already initialized
+
+    const map = L.map(node, { zoomControl: true }).setView([SENTOSA.lat, SENTOSA.lng], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19,
+      attribution: '&copy; OpenStreetMap contributors',
+    }).addTo(map);
+
+    mapRef.current = map;
+
+    // Cleanup function for when the component unmounts
     return () => {
       if (mapRef.current) {
-        mapRef.current.remove()
-        mapRef.current = null
+        mapRef.current.remove();
+        mapRef.current = null;
       }
-    }
-  }, [])
+    };
+  }, []);
 
   const handleSelectPlace = useCallback(async place => {
     if (!place) {
@@ -640,7 +638,7 @@ export default function Home() {
             <i className="fas fa-info-circle" aria-hidden="true"></i>
             {mapHintMessage}
           </div>
-          <div id="map" className="map" role="region" aria-label="Singapore map"></div>
+          <div ref={mapContainerRef} id="map" className="map" role="region" aria-label="Singapore map"></div>
           <div className="map-legend">
             <span><i className="fas fa-location-crosshairs" aria-hidden="true"></i> You</span>
             <span><i className="fas fa-map-marker-alt" aria-hidden="true"></i> Selected Places</span>

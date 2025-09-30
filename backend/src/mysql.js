@@ -1,7 +1,4 @@
-import dotenv from "dotenv";
 import mysql from "mysql2/promise";
-
-dotenv.config();
 
 export const pool = mysql.createPool({
   host: process.env.DB_HOST,
@@ -12,5 +9,6 @@ export const pool = mysql.createPool({
   waitForConnections: true,
   connectionLimit: 10,
   namedPlaceholders: true,
+  connectTimeout: 10000,
+  ssl: "Amazon RDS",
 });
-
