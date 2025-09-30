@@ -1,5 +1,7 @@
+
 import express from "express";
 import { pool } from "../mysql.js";
+import { exec } from "child_process";
 
 const router = express.Router();
 
@@ -70,6 +72,42 @@ router.get("/:placeId", async (req, res) => {
     console.error(`/api/places/${req.params.placeId} error:`, e);
     res.status(500).json({ error: "Failed to fetch place" });
   }
+});
+
+router.get("/recommendations", async (_req, res) => {
+  exec(
+    'python ../prediction.py --mysql-host localhost --mysql-port 3306 --mysql-user cloud_dev --mysql-password TourismPOI --mysql-db cloud2006db --mysql-table clicks --mode top --topk 5 --min-reviews 10 --pretty',
+    (error, stdout, stderr) => {
+      if (error) {
+        console.error("Prediction error:", error, stderr);
+        return res.status(500).json({ error: "Failed to generate recommendations" });
+      }
+      try {
+        const result = JSON.parse(stdout);
+        res.json(result);
+      } catch (e) {
+        res.status(500).json({ error: "Failed to parse recommendations" });
+      }
+    }
+  );
+});
+
+router.get("/recommendations", async (_req, res) => {
+  exec(
+    'python ../prediction.py --mysql-host localhost --mysql-port 3306 --mysql-user cloud_dev --mysql-password TourismPOI --mysql-db cloud2006db --mysql-table clicks --mode top --topk 5 --min-reviews 10 --pretty',
+    (error, stdout, stderr) => {
+      if (error) {
+        console.error("Prediction error:", error, stderr);
+        return res.status(500).json({ error: "Failed to generate recommendations" });
+      }
+      try {
+        const result = JSON.parse(stdout);
+        res.json(result);
+      } catch (e) {
+        res.status(500).json({ error: "Failed to parse recommendations" });
+      }
+    }
+  );
 });
 
 export default router;
