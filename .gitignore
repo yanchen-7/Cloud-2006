@@ -42,4 +42,4 @@ Thumbs.db
 Terraform/.terraform
 cloud-2006-key.pem
 Terraform
-
+Terraform/terraform.tfvars

@@ -62,3 +62,9 @@ variable "asg_max_size" {
   type        = number
   default     = 1
 }
+
+variable "enable_prod_env" {
+  description = "Set to true to create the production ALB and ASG. Set to false to destroy them."
+  type        = bool
+  default     = true
+}

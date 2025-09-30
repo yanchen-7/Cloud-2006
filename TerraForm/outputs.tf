@@ -5,7 +5,7 @@ output "dev_instance_public_ip" {
 
 output "prod_load_balancer_dns" {
   description = "DNS name of the production Application Load Balancer."
-  value       = aws_lb.main.dns_name
+  value       = var.enable_prod_env ? aws_lb.main[0].dns_name : "Production environment (ALB/ASG) is not enabled."
 }
 
 output "rds_database_endpoint" {

@@ -96,6 +96,8 @@ resource "aws_eip_association" "dev_eip_assoc" {
 
 # Launch Template for ASG
 resource "aws_launch_template" "web_server_template" {
+  count = var.enable_prod_env ? 1 : 0
+
   name_prefix   = "${var.project_name}-lt-"
   image_id      = "ami-03042c472f560ae79" # Your custom AMI ID
   instance_type = var.instance_type
@@ -121,6 +123,8 @@ resource "aws_launch_template" "web_server_template" {
 
 # Application Load Balancer (ELB)
 resource "aws_lb" "main" {
+  count = var.enable_prod_env ? 1 : 0
+
   name               = "${var.project_name}-alb"
   internal           = false
   load_balancer_type = "application"
@@ -129,6 +133,8 @@ resource "aws_lb" "main" {
 }
 
 resource "aws_lb_target_group" "main" {
+  count = var.enable_prod_env ? 1 : 0
+
   name     = "${var.project_name}-tg"
   port     = 80
   protocol = "HTTP"
@@ -136,18 +142,22 @@ resource "aws_lb_target_group" "main" {
 }
 
 resource "aws_lb_listener" "http" {
-  load_balancer_arn = aws_lb.main.arn
+  count = var.enable_prod_env ? 1 : 0
+
+  load_balancer_arn = aws_lb.main[0].arn
   port              = "80"
   protocol          = "HTTP"
 
   default_action {
     type             = "forward"
-    target_group_arn = aws_lb_target_group.main.arn
+    target_group_arn = aws_lb_target_group.main[0].arn
   }
 }
 
 # Auto Scaling Group (ASG)
 resource "aws_autoscaling_group" "main" {
+  count = var.enable_prod_env ? 1 : 0
+
   name                = "${var.project_name}-asg"
   desired_capacity    = var.asg_desired_capacity
   max_size            = var.asg_max_size
@@ -155,9 +165,9 @@ resource "aws_autoscaling_group" "main" {
   vpc_zone_identifier = [aws_subnet.public_a.id, aws_subnet.public_b.id]
 
   launch_template {
-    id      = aws_launch_template.web_server_template.id
+    id      = aws_launch_template.web_server_template[0].id
     version = "$Latest"
   }
 
-  target_group_arns = [aws_lb_target_group.main.arn]
+  target_group_arns = [aws_lb_target_group.main[0].arn]
 }
