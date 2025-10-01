@@ -36,7 +36,11 @@ export default function Login(){
           {error && <div className="error">{error}</div>}
           <div className="form-actions"><button type="submit" className="btn primary">Login</button></div>
         </form>
-        <p className="auth-footer">No account? <Link to="/register">Register</Link></p>
+        <p className="auth-footer">
+          <Link to="/forgot-password">Forgot password?</Link>
+          <span> · </span>
+          <span>No account? <Link to="/register">Register</Link></span>
+        </p>
       </div>
     </section>
   )
