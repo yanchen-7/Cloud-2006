@@ -42,6 +42,8 @@ npm run dev
 # API at http://localhost:3001/api
 ```
 
+Update `.env` with SMTP_HOST/PORT/USER/PASS (and optional SMTP_FROM, SMTP_SECURE) plus either PASSWORD_RESET_URL or APP_BASE_URL so password reset emails can be delivered with correct links.
+
 ### Frontend (React + Vite)
 
 ```

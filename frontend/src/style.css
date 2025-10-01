@@ -621,6 +621,12 @@ p {
     color: var(--muted);
 }
 
+.auth-intro {
+    margin: 0 0 1rem;
+    color: var(--muted);
+    font-size: 0.95rem;
+}
+
 .auth-form {
     display: flex;
     flex-direction: column;

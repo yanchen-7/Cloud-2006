@@ -1,9 +1,25 @@
-﻿import React, { useEffect } from 'react'
+﻿import React, { useEffect, useState } from 'react'
 import { Link, Outlet, useLocation } from 'react-router-dom'
 
 export default function AppLayout() {
   const location = useLocation()
+  const [session, setSession] = useState(null)
   const pageId = derivePageId(location.pathname)
+
+  useEffect(() => {
+    let cancelled = false
+    async function loadSession(){
+      try {
+        const res = await fetch('/api/session', { credentials:'include' })
+        const payload = await res.json()
+        if (!cancelled) setSession(payload)
+      } catch (err) {
+        if (!cancelled) setSession(null)
+      }
+    }
+    loadSession()
+    return () => { cancelled = true }
+  }, [location.pathname])
 
   useEffect(() => {
     if (typeof document !== 'undefined') {
@@ -14,6 +30,8 @@ export default function AppLayout() {
     }
     return undefined
   }, [pageId])
+
+  const isAuthenticated = !!session?.authenticated
 
   return (
     <div className="app" data-page={pageId}>
@@ -27,9 +45,13 @@ export default function AppLayout() {
             <ul>
               <li><Link to="/">Home</Link></li>
               <li><Link to="/explore">Explore Places</Link></li>
-              <li><Link to="/profile">Profile</Link></li>
-              <li><Link className="login-link" to="/login">Login</Link></li>
-              <li><Link className="signup-link" to="/register">Register</Link></li>
+              {isAuthenticated && <li><Link to="/profile">Profile</Link></li>}
+              {!isAuthenticated && (
+                <>
+                  <li><Link className="login-link" to="/login">Login</Link></li>
+                  <li><Link className="signup-link" to="/register">Register</Link></li>
+                </>
+              )}
             </ul>
           </nav>
         </div>
