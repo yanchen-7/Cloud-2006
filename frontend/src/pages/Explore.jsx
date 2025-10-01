@@ -38,6 +38,23 @@ export default function Explore() {
     }
   }
 
+  //for favourites
+  useEffect(() => {
+  async function loadSavedFavourites() {
+    try {
+      const res = await fetch('/user-favourites')
+      if (!res.ok) throw new Error('Failed to fetch favourites')
+      const favourites = await res.json()
+      const ids = new Set(favourites.map(fav => fav.place_id))
+      setSavedPlaceIds(ids)
+    } catch (err) {
+      console.error('Failed to load saved favourites', err)
+    }
+  }
+  loadSavedFavourites()
+}, [])
+
+
   const icons = iconsRef.current
 
   const loadPlaces = useCallback(async () => {
@@ -96,15 +113,45 @@ export default function Explore() {
     }
   }, [])
 
-  const handleSavedToggle = useCallback((event, place) => {
-    event.stopPropagation()
-    setSavedPlaceIds(prev => {
-      const next = new Set(prev)
-      if (next.has(place.place_id)) next.delete(place.place_id)
-      else next.add(place.place_id)
-      return next
-    })
-  }, [])
+  // const handleSavedToggle = useCallback((event, place) => {
+  //   event.stopPropagation()
+  //   setSavedPlaceIds(prev => {
+  //     const next = new Set(prev)
+  //     if (next.has(place.place_id)) next.delete(place.place_id)
+  //     else next.add(place.place_id)
+  //     return next
+  //   })
+  // }, [])
+
+  //for favourites
+  const handleSavedToggle = useCallback(async (event, place) => {
+  event.stopPropagation()
+  const placeId = place.place_id
+  const isSaved = savedPlaceIds.has(placeId)
+
+  try {
+    if (!isSaved) {
+      const res = await fetch('/user-favourites', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ place_id: placeId }),
+      })
+      if (!res.ok) throw new Error('Failed to save favourite')
+      setSavedPlaceIds(prev => new Set(prev).add(placeId))
+    } else {
+      const res = await fetch(`/user-favourites/${placeId}`, { method: 'DELETE' })
+      if (!res.ok) throw new Error('Failed to remove favourite')
+      setSavedPlaceIds(prev => {
+        const next = new Set(prev)
+        next.delete(placeId)
+        return next
+      })
+    }
+  } catch (err) {
+    console.error(err)
+  }
+}, [savedPlaceIds])
+
 
   const categories = useMemo(() => {
     const list = Array.isArray(places) ? places : []
