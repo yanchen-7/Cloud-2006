@@ -12,8 +12,31 @@ export default function Register(){
     e.preventDefault()
     setError('')
     if (form.password !== form.confirm) { setError('Passwords do not match'); return }
-    const res = await fetch('/api/session/register', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ username: form.username, email: form.email, password: form.password, gender: form.gender || null, date_of_birth: form.date_of_birth || null, country_of_origin: form.country_of_origin || null }) })
-    if (!res.ok) { setError('Registration failed'); return }
+    const res = await fetch('/api/session/register', {
+      method:'POST',
+      headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({
+        username: form.username,
+        email: form.email,
+        password: form.password,
+        confirmPassword: form.confirm,
+        gender: form.gender || null,
+        date_of_birth: form.date_of_birth || null,
+        country_of_origin: form.country_of_origin || null
+      })
+    })
+    if (!res.ok) {
+      const payload = await res.json().catch(() => ({}))
+      if (payload?.details) {
+        const firstError = Object.values(payload.details)[0]
+        setError(typeof firstError === 'string' ? firstError : 'Registration failed')
+      } else if (payload?.error) {
+        setError(payload.error)
+      } else {
+        setError('Registration failed')
+      }
+      return
+    }
     navigate('/login')
   }
 
@@ -39,4 +62,3 @@ export default function Register(){
     </section>
   )
 }
-

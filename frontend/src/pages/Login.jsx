@@ -11,7 +11,18 @@ export default function Login(){
     e.preventDefault()
     setError('')
     const res = await fetch('/api/session/login', { method:'POST', headers:{'Content-Type':'application/json'}, credentials:'include', body: JSON.stringify({ username, password }) })
-    if (!res.ok) { setError('Invalid username or password'); return }
+    if (!res.ok) {
+      const payload = await res.json().catch(() => ({}))
+      if (payload?.details) {
+        const firstError = Object.values(payload.details)[0]
+        setError(typeof firstError === 'string' ? firstError : 'Invalid username or password')
+      } else if (payload?.error) {
+        setError(payload.error)
+      } else {
+        setError('Invalid username or password')
+      }
+      return
+    }
     navigate('/')
   }
 
@@ -20,7 +31,7 @@ export default function Login(){
       <div className="auth-card">
         <h1>Login</h1>
         <form onSubmit={onSubmit} className="auth-form">
-          <div className="form-field"><label>Username</label><input value={username} onChange={e=>setUsername(e.target.value)} required /></div>
+          <div className="form-field"><label>Username or Email</label><input value={username} onChange={e=>setUsername(e.target.value)} required /></div>
           <div className="form-field"><label>Password</label><input type="password" value={password} onChange={e=>setPassword(e.target.value)} required /></div>
           {error && <div className="error">{error}</div>}
           <div className="form-actions"><button type="submit" className="btn primary">Login</button></div>
@@ -30,4 +41,3 @@ export default function Login(){
     </section>
   )
 }
-
