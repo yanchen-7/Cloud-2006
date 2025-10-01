@@ -26,7 +26,7 @@ export function isValidPassword(password) {
 }
 
 export function parseDateOfBirth(raw) {
-  if (!raw) return { value: null };
+  if (!raw) return { value: null, age: null };
   if (!/^[0-9]{4}-[0-9]{2}-[0-9]{2}$/.test(raw)) return { error: "Date of birth must be in YYYY-MM-DD format" };
   const parsed = new Date(raw);
   if (Number.isNaN(parsed.getTime())) return { error: "Date of birth is invalid" };
@@ -35,7 +35,7 @@ export function parseDateOfBirth(raw) {
   const age = today.getFullYear() - parsed.getFullYear() - (today < new Date(today.getFullYear(), parsed.getMonth(), parsed.getDate()) ? 1 : 0);
   if (age < 13) return { error: "Users must be at least 13 years old" };
   if (age > 120) return { error: "Date of birth is out of range" };
-  return { value: raw };
+  return { value: raw, age };
 }
 
 export function buildSessionUser(row) {

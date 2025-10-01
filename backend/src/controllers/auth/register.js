@@ -81,10 +81,11 @@ export async function register(req, res) {
     const [existsEmail] = await pool.query("SELECT 1 FROM accounts WHERE email = ? LIMIT 1", [email]);
     if (existsEmail.length) return res.status(409).json({ error: "Email exists" });
     const hash = await bcrypt.hash(password, 10);
+    const age = dobCheck.value ? dobCheck.age ?? null : null;
     const [result] = await pool.query(
       `INSERT INTO accounts (email, password, role, gender, username, date_of_birth, country_of_origin, age, created_at, updated_at)
-       VALUES (?, ?, 'user', ?, ?, ?, ?, NULL, NOW(), NOW())`,
-      [email, hash, gender || null, username, dobCheck.value || null, country_of_origin || null]
+       VALUES (?, ?, 'user', ?, ?, ?, ?, ?, NOW(), NOW())`,
+      [email, hash, gender || null, username, dobCheck.value || null, country_of_origin || null, age]
     );
     res.status(201).json({ account_id: result.insertId });
   } catch (err) {
