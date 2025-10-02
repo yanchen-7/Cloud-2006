@@ -83,9 +83,25 @@ export default function Home() {
     }
   }, [userLocation]);
 
+  const loadSavedPlaces = useCallback(async () => {
+  try {
+    const response = await fetch('/api/favourites');
+    if (!response.ok) throw new Error('Failed to fetch favourites');
+    const data = await response.json();
+    setSavedPlaces(new Set(data.map(fav => fav.place_id)));
+  } catch (err) {
+    console.error('Error loading saved places', err);
+  }
+}, []);
+
+
   useEffect(() => {
     loadPlaces()
   }, [loadPlaces])
+
+  useEffect(() => {
+  loadSavedPlaces();
+}, [loadSavedPlaces]);
 
   // Callback ref to initialize the map safely
   const mapContainerRef = useCallback(node => {
@@ -146,23 +162,24 @@ export default function Home() {
   const totalPlaces = Array.isArray(places) ? places.length : 0
 
   useEffect(() => {
-    if (!mapRef.current || !icons) return
-    markersRef.current.forEach(marker => marker.remove())
-    markersRef.current = []
+  if (!mapRef.current || !icons) return;
+  markersRef.current.forEach(marker => marker.remove());
+  markersRef.current = [];
 
-    filteredPlaces.forEach(place => {
-      const lat = Number(place?.latitude)
-      const lng = Number(place?.longitude)
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
+  filteredPlaces.forEach(place => {
+    const lat = Number(place?.latitude);
+    const lng = Number(place?.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
-      const marker = L.marker([lat, lng], {
-        icon: savedPlaces.has(place.place_id) ? icons.saved : icons.default,
-      }).addTo(mapRef.current)
+    const marker = L.marker([lat, lng], {
+      icon: savedPlaces.has(place.place_id) ? icons.saved : icons.default,
+    }).addTo(mapRef.current);
 
-      marker.on('click', () => handleSelectPlace(place))
-      markersRef.current.push(marker)
-    })
-  }, [filteredPlaces, icons, savedPlaces, handleSelectPlace])
+    marker.on('click', () => handleSelectPlace(place));
+    markersRef.current.push(marker);
+  });
+}, [filteredPlaces, icons, savedPlaces, handleSelectPlace]);
+
 
   useEffect(() => {
     if (!mapRef.current || !icons?.user) return
@@ -234,14 +251,33 @@ export default function Home() {
     return () => window.clearInterval(timer)
   }, [recommendations.length])
 
-  const toggleSavedPlace = useCallback(placeId => {
+  const toggleSavedPlace = useCallback(async (placeId) => {
+  try {
     setSavedPlaces(prev => {
-      const next = new Set(prev)
-      if (next.has(placeId)) next.delete(placeId)
-      else next.add(placeId)
-      return next
-    })
-  }, [])
+      const isSaved = prev.has(placeId);
+      const next = new Set(prev);
+      if (isSaved) {
+        next.delete(placeId);
+        fetch(`/api/favourites/${encodeURIComponent(placeId)}`, {
+          method: 'DELETE',
+          headers: { 'Content-Type': 'application/json' },
+        }).catch(err => console.error('Error removing favourite', err));
+      } else {
+        next.add(placeId);
+        fetch('/api/favourites', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ place_id: placeId }),
+        }).catch(err => console.error('Error saving favourite', err));
+      }
+      return next;
+    });
+  } catch (err) {
+    console.error('Error toggling saved place', err);
+  }
+}, []);
+
+
 
   const handleLocateMe = useCallback(() => {
     if (typeof navigator === 'undefined' || !navigator.geolocation) {

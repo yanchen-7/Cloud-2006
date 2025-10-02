@@ -16,6 +16,7 @@ export default function Explore() {
   const [selectedPlace, setSelectedPlace] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
+  const [favouritesLoaded, setFavouritesLoaded] = useState(false);
 
   if (!iconsRef.current && typeof L !== 'undefined') {
     iconsRef.current = {
@@ -38,21 +39,25 @@ export default function Explore() {
     }
   }
 
-  //for favourites
+
   useEffect(() => {
-  async function loadSavedFavourites() {
-    try {
-      const res = await fetch('/user-favourites')
-      if (!res.ok) throw new Error('Failed to fetch favourites')
-      const favourites = await res.json()
-      const ids = new Set(favourites.map(fav => fav.place_id))
-      setSavedPlaceIds(ids)
-    } catch (err) {
-      console.error('Failed to load saved favourites', err)
+    async function loadFavourites() {
+      try {
+        const res = await fetch('/api/favourites', { credentials: 'include' });
+
+        if (!res.ok) throw new Error('Failed to fetch favourites');
+        const data = await res.json();
+
+        setSavedPlaceIds(new Set(data.map(fav => String(fav.place_id).trim())));
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setFavouritesLoaded(true);
+      }
     }
-  }
-  loadSavedFavourites()
-}, [])
+    loadFavourites();   
+  }, []);
+
 
 
   const icons = iconsRef.current
@@ -113,44 +118,44 @@ export default function Explore() {
     }
   }, [])
 
-  // const handleSavedToggle = useCallback((event, place) => {
-  //   event.stopPropagation()
-  //   setSavedPlaceIds(prev => {
-  //     const next = new Set(prev)
-  //     if (next.has(place.place_id)) next.delete(place.place_id)
-  //     else next.add(place.place_id)
-  //     return next
-  //   })
-  // }, [])
-
-  //for favourites
   const handleSavedToggle = useCallback(async (event, place) => {
   event.stopPropagation()
-  const placeId = place.place_id
-  const isSaved = savedPlaceIds.has(placeId)
+  if (!place?.place_id) return
 
   try {
-    if (!isSaved) {
-      const res = await fetch('/user-favourites', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ place_id: placeId }),
+    if (savedPlaceIds.has(String(place.place_id))) {
+      // Remove from favourites
+      const res = await fetch(`/api/favourites/${encodeURIComponent(place.place_id)}`, {
+        method: 'DELETE',
+        headers: { 'Content-Type': 'application/json' }
       })
-      if (!res.ok) throw new Error('Failed to save favourite')
-      setSavedPlaceIds(prev => new Set(prev).add(placeId))
-    } else {
-      const res = await fetch(`/user-favourites/${placeId}`, { method: 'DELETE' })
       if (!res.ok) throw new Error('Failed to remove favourite')
       setSavedPlaceIds(prev => {
         const next = new Set(prev)
-        next.delete(placeId)
+        next.delete(String(place.place_id))
+        return next
+      })
+    } else {
+      // Add to favourites
+      const res = await fetch('/api/favourites', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ place_id: place.place_id })
+      })
+      if (!res.ok) throw new Error('Failed to save as favourite')
+      setSavedPlaceIds(prev => {
+        const next = new Set(prev)
+        next.add(String(place.place_id))
         return next
       })
     }
   } catch (err) {
     console.error(err)
+    alert(err.message || 'Failed to update favourite')
   }
 }, [savedPlaceIds])
+
+
 
 
   const categories = useMemo(() => {
@@ -165,28 +170,42 @@ export default function Explore() {
   const filteredPlaces = useMemo(() => {
     let list = Array.isArray(places) ? places : []
     if (category) list = list.filter(place => place.category === category)
-    if (showSavedOnly) list = list.filter(place => savedPlaceIds.has(place.place_id))
+    if (showSavedOnly && favouritesLoaded) 
+      list = list.filter(place => savedPlaceIds.has(String(place.place_id)))
     return list
       .slice(0, MAX_MARKERS)
       .sort((a, b) => Number(b?.rating || 0) - Number(a?.rating || 0))
-  }, [places, category, showSavedOnly, savedPlaceIds])
+  }, [places, category, showSavedOnly, savedPlaceIds, favouritesLoaded])
+
+
 
   useEffect(() => {
-    if (!mapRef.current || !icons) return
-    markersRef.current.forEach(marker => marker.remove())
-    markersRef.current = []
+  // Only proceed if map and icons are ready
+  if (!mapRef.current || !icons) return;
+  if (!favouritesLoaded) return;
 
-    filteredPlaces.forEach(place => {
-      const lat = Number(place?.latitude)
-      const lng = Number(place?.longitude)
-      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
-      const marker = L.marker([lat, lng], {
-        icon: savedPlaceIds.has(place.place_id) ? icons.saved : icons.default,
-      }).addTo(mapRef.current)
-      marker.on('click', () => handleSelectPlace(place))
-      markersRef.current.push(marker)
-    })
-  }, [filteredPlaces, icons, savedPlaceIds, handleSelectPlace])
+  // Remove old markers from the map
+  markersRef.current.forEach(marker => marker.remove());
+  markersRef.current = [];
+
+  // If no places to show, stop here
+  if (!filteredPlaces.length) return;
+
+  // Add new markers
+  filteredPlaces.forEach(place => {
+    const lat = Number(place?.latitude);
+    const lng = Number(place?.longitude);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+
+    const marker = L.marker([lat, lng], {
+      icon: savedPlaceIds.has(String(place.place_id).trim()) ? icons.saved : icons.default,
+    }).addTo(mapRef.current);
+
+    marker.on('click', () => handleSelectPlace(place));
+    markersRef.current.push(marker);
+  });
+}, [filteredPlaces, savedPlaceIds, favouritesLoaded, icons, handleSelectPlace]);
+
 
   useEffect(() => {
     if (!mapRef.current) return
@@ -211,7 +230,7 @@ export default function Explore() {
     }
   }, [handleSelectPlace])
 
-  const isSelectedSaved = !!(selectedPlace && savedPlaceIds.has(selectedPlace.place_id))
+  const isSelectedSaved = !!(selectedPlace && savedPlaceIds.has(String(selectedPlace.place_id).trim()))
   const selectedSummary = buildReviewsSummary(selectedPlace?.user_reviews_summary)
   const selectedPrice = formatPriceLevel(selectedPlace?.price_level)
   const selectedWebsite = normalizeWebsite(selectedPlace?.website || selectedPlace?.website_url)
@@ -265,7 +284,7 @@ export default function Explore() {
           </div>
           <div id="exploreList" className="explore-list">
             {filteredPlaces.length ? filteredPlaces.map(place => {
-              const saved = savedPlaceIds.has(place.place_id)
+              const saved = savedPlaceIds.has(String(place.place_id).trim())
               return (
                 <article
                   key={place.place_id}
@@ -400,4 +419,3 @@ function deriveStatus(place) {
   if (raw.includes('open')) return { label: 'Open', state: 'open' }
   return { label: 'Status unknown', state: 'unknown' }
 }
-

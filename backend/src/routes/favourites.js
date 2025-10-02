@@ -10,15 +10,24 @@ function requireAuth(req, res, next) {
 
 router.get("/", requireAuth, async (req, res) => {
   try {
+    console.log("Session user:", req.session.user);
     const accountId = req.session.user.account_id;
     const [rows] = await pool.query(
-      `SELECT uf.place_id, uf.added_at, b.name, b.place_name, b.formatted_address, b.address, b.latitude, b.longitude, b.category, b.international_phone_number, b.website, b.opening_hours, b.rating, b.price_level
-       FROM user_favourites uf INNER JOIN business_info b ON b.place_id = uf.place_id WHERE uf.account_id = ? ORDER BY uf.added_at DESC`,
-      [accountId]
+    `SELECT uf.place_id, uf.added_at,
+            b.place_name, b.address, b.latitude, b.longitude, b.category,
+            b.international_phone_number, b.website, b.opening_hours,
+            b.rating, b.price_level
+     FROM user_favourites uf
+     INNER JOIN business_info b ON b.place_id = uf.place_id
+     WHERE uf.account_id = ?
+     ORDER BY uf.added_at DESC`,
+    [accountId]
     );
     res.json(rows);
   } catch (e) {
-    res.status(500).json({ error: "Failed to fetch favourites" });
+    res.status(500).json({ error: "Failed to fetch favourites" ,
+    session: req.session,
+    details: e.message});
   }
 });
 
@@ -36,7 +45,7 @@ router.post("/", requireAuth, async (req, res) => {
     if (!rows.length) return res.status(404).json({ error: "Place not found" });
     res.status(201).json(rows[0]);
   } catch (e) {
-    res.status(500).json({ error: "Failed to save favourite" });
+    res.status(500).json({ error: "Please login to save favourite" });
   }
 });
 

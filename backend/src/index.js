@@ -44,7 +44,7 @@ app.use(session({
   secret: SESSION_SECRET,
   resave: false,
   saveUninitialized: false,
-  cookie: { httpOnly: true, sameSite: "lax" }
+  cookie: { httpOnly: true, sameSite: "lax", secure: false }
 }));
 
 // Re-import pool after initialization for the health check
