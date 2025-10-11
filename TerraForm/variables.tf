@@ -48,23 +48,41 @@ variable "flask_secret_key" {
 variable "asg_desired_capacity" {
   description = "The desired number of instances in the Auto Scaling Group."
   type        = number
-  default     = 1
+  default     = 2
 }
 
 variable "asg_min_size" {
   description = "The minimum number of instances in the Auto Scaling Group."
   type        = number
-  default     = 1
+  default     = 2
 }
 
 variable "asg_max_size" {
   description = "The maximum number of instances in the Auto Scaling Group."
   type        = number
-  default     = 1
+  default     = 4
 }
 
 variable "enable_prod_env" {
   description = "Set to true to create the production ALB and ASG. Set to false to destroy them."
   type        = bool
   default     = true
+}
+
+variable "prod_ami_id" {
+  description = "The AMI ID to use for production EC2 instances. Defaults to the latest Amazon Linux 2023 AMI."
+  type        = string
+  default     = "" # An empty string will cause it to use the data source.
+}
+
+variable "dev_ami_id" {
+  description = "The AMI ID to use for the dev EC2 instance. If empty, uses the latest Amazon Linux 2023 AMI."
+  type        = string
+  default     = ""
+}
+
+variable "refresh_prod_db" {
+  description = "Set to true to create a new snapshot from the dev DB and replace the prod DB with it. Defaults to false."
+  type        = bool
+  default     = false
 }

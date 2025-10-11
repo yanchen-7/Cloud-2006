@@ -8,9 +8,33 @@ output "prod_load_balancer_dns" {
   value       = var.enable_prod_env ? aws_lb.main[0].dns_name : "Production environment (ALB/ASG) is not enabled."
 }
 
-output "rds_database_endpoint" {
-  description = "Endpoint of the RDS database instance."
-  value       = aws_db_instance.main.endpoint
+output "dev_rds_details" {
+  description = "Connection details for the Development RDS database."
+  value = {
+    endpoint = aws_db_instance.main.endpoint
+    address  = aws_db_instance.main.address
+    port     = aws_db_instance.main.port
+    username = aws_db_instance.main.username
+    db_name  = aws_db_instance.main.db_name
+  }
+  sensitive = true
+}
+
+output "prod_rds_details" {
+  description = "Connection details for the Production RDS database."
+  value = var.enable_prod_env ? {
+    endpoint = aws_db_instance.prod_db[0].endpoint
+    address  = aws_db_instance.prod_db[0].address
+    port     = aws_db_instance.prod_db[0].port
+    # The username is inherited from the snapshot.
+    username = aws_db_instance.main.username
+    # The database name(s) are also inherited from the snapshot.
+    # The `db_name` attribute is not available on snapshot-restored instances.
+    db_name = "Databases are inherited from the snapshot (e.g., '${aws_db_instance.main.db_name}')"
+  } : {
+    endpoint = "Production RDS is not enabled."
+  }
+  sensitive = true
 }
 
 output "s3_bucket_name" {

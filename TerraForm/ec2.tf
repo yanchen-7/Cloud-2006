@@ -45,7 +45,7 @@ resource "aws_iam_instance_profile" "ec2_profile" {
 
 # --- 7. Dev EC2 Instance ---
 resource "aws_instance" "web_server_dev" {
-  ami                    = data.aws_ami.amazon_linux_2023.id
+  ami                    = var.dev_ami_id != "" ? var.dev_ami_id : data.aws_ami.amazon_linux_2023.id
   instance_type          = var.instance_type
   key_name               = aws_key_pair.key_pair.key_name
   subnet_id              = aws_subnet.public_a.id
@@ -99,10 +99,9 @@ resource "aws_launch_template" "web_server_template" {
   count = var.enable_prod_env ? 1 : 0
 
   name_prefix   = "${var.project_name}-lt-"
-  image_id      = "ami-03042c472f560ae79" # Your custom AMI ID
+  image_id      = var.prod_ami_id != "" ? var.prod_ami_id : data.aws_ami.amazon_linux_2023.id
   instance_type = var.instance_type
   key_name      = aws_key_pair.key_pair.key_name
-  # We no longer need user_data, as the AMI is pre-configured.
 
   network_interfaces {
     associate_public_ip_address = true
@@ -139,6 +138,12 @@ resource "aws_lb_target_group" "main" {
   port     = 80
   protocol = "HTTP"
   vpc_id   = aws_vpc.main.id
+
+  health_check {
+    path                = "/"
+    protocol            = "HTTP"
+    matcher             = "200"
+  }
 }
 
 resource "aws_lb_listener" "http" {
