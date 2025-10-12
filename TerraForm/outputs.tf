@@ -51,3 +51,14 @@ output "private_key_filename" {
   description = "The private key is saved to this file. Keep it secure."
   value       = local_file.private_key_pem.filename
 }
+
+# --- Outputs for CloudFront URLs ---
+output "cloudfront_prod_url" {
+  description = "The URL for the production CloudFront distribution."
+  value       = var.enable_prod_env ? "https://${aws_cloudfront_distribution.prod_distribution[0].domain_name}" : "Production environment is disabled."
+}
+
+output "cloudfront_dev_url" {
+  description = "The URL for the development CloudFront distribution."
+  value       = "https://${aws_cloudfront_distribution.dev_distribution.domain_name}"
+}

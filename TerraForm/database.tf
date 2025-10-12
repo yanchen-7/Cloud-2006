@@ -10,6 +10,30 @@ resource "aws_db_subnet_group" "db_subnet_group" {
   }
 }
 
+# --- IAM Role for RDS Enhanced Monitoring ---
+resource "aws_iam_role" "rds_enhanced_monitoring_role" {
+  name = "${var.project_name}-rds-monitoring-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Action = "sts:AssumeRole",
+        Effect = "Allow",
+        Principal = {
+          Service = "monitoring.rds.amazonaws.com"
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "rds_enhanced_monitoring_attach" {
+  role       = aws_iam_role.rds_enhanced_monitoring_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole"
+}
+
+
 # RDS MySQL Instance
 # Existing Development RDS MySQL Instance
 resource "aws_db_instance" "main" {
@@ -31,6 +55,9 @@ resource "aws_db_instance" "main" {
   # Disabling automated backups as requested, not recommended for production
   backup_retention_period = 0
 
+  # Enable Enhanced Monitoring at a 60-second interval
+  monitoring_interval    = 60
+  monitoring_role_arn    = aws_iam_role.rds_enhanced_monitoring_role.arn
   tags = {
     Name = "${var.project_name}-db"
   }
@@ -65,6 +92,10 @@ resource "aws_db_instance" "prod_db" {
   deletion_protection = true
   skip_final_snapshot = false
   final_snapshot_identifier = "${var.project_name}-prod-db-final-snapshot"
+
+  # Enable Enhanced Monitoring at a 60-second interval
+  monitoring_interval    = 60
+  monitoring_role_arn    = aws_iam_role.rds_enhanced_monitoring_role.arn
 
   tags = {
     Name = "${var.project_name}-prod-db"

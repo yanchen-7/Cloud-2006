@@ -41,5 +41,8 @@ Thumbs.db
 # --- Terraform ---
 Terraform/.terraform
 cloud-2006-key.pem
-Terraform
 Terraform/terraform.tfvars
+Terraform/.venv
+Terraform/.terraform.lock.hcl
+Terraform/terraform.tfstate
+Terraform/terraform.tfstate.backup

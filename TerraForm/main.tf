@@ -1,16 +1,3 @@
-terraform {
-  required_providers {
-    aws = {
-      source  = "hashicorp/aws"
-      version = "~> 5.0"
-    }
-  }
-}
-
-provider "aws" {
-  region = var.aws_region
-}
-
 # --- Data Source for latest Amazon Linux 2023 AMI ---
 # This dynamically finds the most recent Free Tier eligible AMI, so you don't have to hardcode it.
 data "aws_ami" "amazon_linux_2023" {
