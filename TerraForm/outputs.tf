@@ -8,14 +8,19 @@ output "prod_load_balancer_dns" {
   value       = var.enable_prod_env ? aws_lb.main[0].dns_name : "Production environment (ALB/ASG) is not enabled."
 }
 
+output "prod_api_gateway_url" {
+  description = "The invocation URL for the production HTTP API Gateway."
+  value       = var.enable_prod_env ? aws_apigatewayv2_api.main[0].api_endpoint : "Production API Gateway is not enabled."
+}
+
 output "dev_rds_details" {
   description = "Connection details for the Development RDS database."
   value = {
-    endpoint = aws_db_instance.main.endpoint
-    address  = aws_db_instance.main.address
-    port     = aws_db_instance.main.port
-    username = aws_db_instance.main.username
-    db_name  = aws_db_instance.main.db_name
+    endpoint = aws_db_instance.dev_db.endpoint
+    address  = aws_db_instance.dev_db.address
+    port     = aws_db_instance.dev_db.port
+    username = aws_db_instance.dev_db.username
+    db_name  = aws_db_instance.dev_db.db_name
   }
   sensitive = true
 }
@@ -26,15 +31,23 @@ output "prod_rds_details" {
     endpoint = aws_db_instance.prod_db[0].endpoint
     address  = aws_db_instance.prod_db[0].address
     port     = aws_db_instance.prod_db[0].port
-    # The username is inherited from the snapshot.
-    username = aws_db_instance.main.username
-    # The database name(s) are also inherited from the snapshot.
-    # The `db_name` attribute is not available on snapshot-restored instances.
-    db_name = "Databases are inherited from the snapshot (e.g., '${aws_db_instance.main.db_name}')"
+    username = aws_db_instance.dev_db.username
+    db_name  = "Databases are inherited from the snapshot (e.g., '${aws_db_instance.dev_db.db_name}')"
+    secret_name = aws_secretsmanager_secret.prod_db_credentials[0].name
   } : {
     endpoint = "Production RDS is not enabled."
   }
   sensitive = true
+}
+
+output "prod_cache_details" {
+  description = "Connection details for the Production ElastiCache for Redis cluster."
+  value = var.enable_prod_env ? {
+    endpoint = aws_elasticache_cluster.prod_cache[0].cache_nodes[0].address
+    port     = aws_elasticache_cluster.prod_cache[0].cache_nodes[0].port
+  } : {
+    endpoint = "Production Cache is not enabled."
+  }
 }
 
 output "s3_bucket_name" {

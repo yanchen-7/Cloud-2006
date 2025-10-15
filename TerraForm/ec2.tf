@@ -33,6 +33,44 @@ resource "aws_iam_role" "ec2_s3_role" {
   })
 }
 
+# --- IAM Policy to allow sending messages to the SQS queue ---
+data "aws_iam_policy_document" "send_to_review_queue_policy_doc" {
+  count = var.enable_prod_env ? 1 : 0
+
+  statement {
+    actions = [
+      "sqs:SendMessage"
+    ]
+    resources = [
+      aws_sqs_queue.review_processing_queue[0].arn
+    ]
+  }
+}
+
+resource "aws_iam_policy" "send_to_review_queue_policy" {
+  count  = var.enable_prod_env ? 1 : 0
+  name   = "${var.project_name}-send-to-review-queue-policy"
+  policy = data.aws_iam_policy_document.send_to_review_queue_policy_doc[0].json
+}
+# --- IAM Policy to allow reading the production DB secret ---
+data "aws_iam_policy_document" "read_prod_db_secret_policy_doc" {
+  count = var.enable_prod_env ? 1 : 0
+
+  statement {
+    actions = [
+      "secretsmanager:GetSecretValue"
+    ]
+    resources = [
+      aws_secretsmanager_secret.prod_db_credentials[0].arn
+    ]
+  }
+}
+
+resource "aws_iam_policy" "read_prod_db_secret_policy" {
+  count  = var.enable_prod_env ? 1 : 0
+  name   = "${var.project_name}-read-prod-db-secret-policy"
+  policy = data.aws_iam_policy_document.read_prod_db_secret_policy_doc[0].json
+}
 resource "aws_iam_role_policy_attachment" "s3_policy_attach" {
   role       = aws_iam_role.ec2_s3_role.name
   policy_arn = "arn:aws:iam::aws:policy/AmazonS3FullAccess" # For simplicity. Can be restricted.
@@ -44,6 +82,18 @@ resource "aws_iam_role_policy_attachment" "cloudwatch_agent_policy_attach" {
   role       = aws_iam_role.ec2_s3_role.name
   policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
 }
+
+resource "aws_iam_role_policy_attachment" "read_prod_db_secret_attach" {
+  count      = var.enable_prod_env ? 1 : 0
+  role       = aws_iam_role.ec2_s3_role.name
+  policy_arn = aws_iam_policy.read_prod_db_secret_policy[0].arn
+}
+
+resource "aws_iam_role_policy_attachment" "send_to_review_queue_attach" {
+  count      = var.enable_prod_env ? 1 : 0
+  role       = aws_iam_role.ec2_s3_role.name
+  policy_arn = aws_iam_policy.send_to_review_queue_policy[0].arn
+}
 resource "aws_iam_instance_profile" "ec2_profile" {
   name = "ec2-s3-instance-profile-cloud-2006"
   role = aws_iam_role.ec2_s3_role.name
@@ -54,8 +104,8 @@ resource "aws_instance" "web_server_dev" {
   ami                    = var.dev_ami_id != "" ? var.dev_ami_id : data.aws_ami.amazon_linux_2023.id
   instance_type          = var.instance_type
   key_name               = aws_key_pair.key_pair.key_name
-  subnet_id              = aws_subnet.public_a.id
-  vpc_security_group_ids = [aws_security_group.web_sg.id]
+  subnet_id              = aws_subnet.dev_public.id
+  vpc_security_group_ids = [aws_security_group.dev_web_sg.id]
   iam_instance_profile   = aws_iam_instance_profile.ec2_profile.name
 
   # This script runs on the first boot to set up the Node.js environment.
