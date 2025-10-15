@@ -24,6 +24,29 @@ resource "aws_secretsmanager_secret_version" "prod_db_credentials_version" {
 
   secret_id = aws_secretsmanager_secret.prod_db_credentials[0].id
   secret_string = jsonencode({
+    username = var.db_username
     password = random_password.prod_db_password[0].result
+    dbname   = aws_db_instance.dev_db.db_name
+  })
+}
+
+# Development database credentials stored in Secrets Manager so instances avoid hardcoded .env values.
+resource "aws_secretsmanager_secret" "dev_db_credentials" {
+  name = "${var.project_name}-dev-db-credentials"
+
+  tags = {
+    Name = "${var.project_name}-dev-db-credentials"
+  }
+}
+
+resource "aws_secretsmanager_secret_version" "dev_db_credentials_version" {
+  secret_id = aws_secretsmanager_secret.dev_db_credentials.id
+
+  secret_string = jsonencode({
+    username = var.db_username
+    password = var.db_password
+    dbname   = aws_db_instance.dev_db.db_name
+    host     = aws_db_instance.dev_db.address
+    port     = aws_db_instance.dev_db.port
   })
 }

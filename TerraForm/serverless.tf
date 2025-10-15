@@ -39,8 +39,15 @@ resource "aws_iam_role_policy_attachment" "review_lambda_basic_execution" {
   policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaBasicExecutionRole"
 }
 
+resource "aws_iam_role_policy_attachment" "review_lambda_vpc_access" {
+  count = var.enable_prod_env ? 1 : 0
+
+  role       = aws_iam_role.review_processor_lambda_role[0].name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AWSLambdaVPCAccessExecutionRole"
+}
+
 # Policy to allow the Lambda to read from SQS and use Comprehend for sentiment analysis
-resource "aws_iam_policy" "review_lambda_sqs_comprehend_policy" {
+resource "aws_iam_policy" "review_lambda_permissions" {
   count = var.enable_prod_env ? 1 : 0
 
   name   = "${var.project_name}-review-lambda-policy"
@@ -56,16 +63,27 @@ resource "aws_iam_policy" "review_lambda_sqs_comprehend_policy" {
         Effect   = "Allow",
         Action   = "comprehend:DetectSentiment",
         Resource = "*" # Comprehend actions do not support resource-level permissions
+      },
+      {
+        Effect   = "Allow",
+        Action   = ["secretsmanager:GetSecretValue"],
+        Resource = aws_secretsmanager_secret.prod_db_credentials[0].arn
       }
     ]
   })
 }
 
-resource "aws_iam_role_policy_attachment" "review_lambda_sqs_comprehend_attach" {
+resource "aws_iam_role_policy_attachment" "review_lambda_permissions_attach" {
   count = var.enable_prod_env ? 1 : 0
 
   role       = aws_iam_role.review_processor_lambda_role[0].name
-  policy_arn = aws_iam_policy.review_lambda_sqs_comprehend_policy[0].arn
+  policy_arn = aws_iam_policy.review_lambda_permissions[0].arn
+}
+
+data "archive_file" "lambda_zip" {
+  type        = "zip"
+  source_dir  = "${path.module}/lambda_code/review_processor"
+  output_path = "${path.module}/lambda_code/review_processor.zip"
 }
 
 # --- Lambda Function and SQS Trigger ---
@@ -76,18 +94,30 @@ resource "aws_lambda_function" "review_processor" {
 
   function_name = "${var.project_name}-review-processor"
   role          = aws_iam_role.review_processor_lambda_role[0].arn
-  handler       = "index.handler" # Assumes 'index.js' with an exported 'handler' function
-  runtime       = "nodejs18.x"
-  timeout       = 30
+  handler       = "lambda_function.lambda_handler"
+  runtime       = "python3.11"
+  timeout       = 60
 
-  filename         = "lambda_code/sentiment_processor.zip" # Placeholder path
-  source_code_hash = filebase64sha256("lambda_code/sentiment_processor.zip")
+  filename         = data.archive_file.lambda_zip.output_path
+  source_code_hash = data.archive_file.lambda_zip.output_base64sha256
+
+  # Connect the Lambda to the VPC to access the private RDS instance
+  vpc_config {
+    subnet_ids         = [aws_subnet.private_a.id, aws_subnet.private_b.id]
+    security_group_ids = [aws_security_group.lambda_sg[0].id]
+  }
 
   environment {
     variables = {
-      # Add any environment variables your lambda needs, e.g., DB connection details
-      # DB_SECRET_NAME = aws_secretsmanager_secret.prod_db_credentials[0].name
+      DB_SECRET_NAME = aws_secretsmanager_secret.prod_db_credentials[0].name
+      DB_HOST        = aws_db_instance.prod_db[0].address
+      DB_NAME        = aws_db_instance.dev_db.db_name
+      DB_PORT        = tostring(aws_db_instance.dev_db.port)
     }
+  }
+
+  tracing_config {
+    mode = "Active"
   }
 }
 
@@ -107,5 +137,40 @@ resource "aws_apigatewayv2_api" "main" {
 
   name          = "${var.project_name}-http-api"
   protocol_type = "HTTP"
-  target        = aws_lb.main[0].arn # Default route forwards to the ALB
+}
+
+resource "aws_apigatewayv2_vpc_link" "alb" {
+  count = var.enable_prod_env ? 1 : 0
+
+  name               = "${var.project_name}-alb-vpc-link"
+  security_group_ids = [aws_security_group.apigw_link_sg.id]
+  subnet_ids         = [aws_subnet.public_a.id, aws_subnet.public_b.id]
+}
+
+resource "aws_apigatewayv2_integration" "alb_proxy" {
+  count = var.enable_prod_env ? 1 : 0
+
+  api_id                 = aws_apigatewayv2_api.main[0].id
+  integration_type       = "HTTP_PROXY"
+  integration_method     = "ANY"
+  integration_uri        = aws_lb_listener.http[0].arn
+  connection_type        = "VPC_LINK"
+  connection_id          = aws_apigatewayv2_vpc_link.alb[0].id
+  payload_format_version = "1.0"
+}
+
+resource "aws_apigatewayv2_route" "default" {
+  count = var.enable_prod_env ? 1 : 0
+
+  api_id    = aws_apigatewayv2_api.main[0].id
+  route_key = "$default"
+  target    = "integrations/${aws_apigatewayv2_integration.alb_proxy[0].id}"
+}
+
+resource "aws_apigatewayv2_stage" "prod" {
+  count = var.enable_prod_env ? 1 : 0
+
+  api_id      = aws_apigatewayv2_api.main[0].id
+  name        = "$default"
+  auto_deploy = true
 }

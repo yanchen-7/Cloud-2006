@@ -75,3 +75,8 @@ output "cloudfront_dev_url" {
   description = "The URL for the development CloudFront distribution."
   value       = "https://${aws_cloudfront_distribution.dev_distribution.domain_name}"
 }
+
+output "review_queue_url" {
+  description = "URL of the SQS queue that buffers user reviews."
+  value       = var.enable_prod_env ? aws_sqs_queue.review_processing_queue[0].url : "Review queue disabled."
+}

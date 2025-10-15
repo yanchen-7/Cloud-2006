@@ -89,6 +89,27 @@ resource "aws_iam_role_policy_attachment" "read_prod_db_secret_attach" {
   policy_arn = aws_iam_policy.read_prod_db_secret_policy[0].arn
 }
 
+data "aws_iam_policy_document" "read_dev_db_secret_policy_doc" {
+  statement {
+    actions = [
+      "secretsmanager:GetSecretValue"
+    ]
+    resources = [
+      aws_secretsmanager_secret.dev_db_credentials.arn
+    ]
+  }
+}
+
+resource "aws_iam_policy" "read_dev_db_secret_policy" {
+  name   = "${var.project_name}-read-dev-db-secret-policy"
+  policy = data.aws_iam_policy_document.read_dev_db_secret_policy_doc.json
+}
+
+resource "aws_iam_role_policy_attachment" "read_dev_db_secret_attach" {
+  role       = aws_iam_role.ec2_s3_role.name
+  policy_arn = aws_iam_policy.read_dev_db_secret_policy.arn
+}
+
 resource "aws_iam_role_policy_attachment" "send_to_review_queue_attach" {
   count      = var.enable_prod_env ? 1 : 0
   role       = aws_iam_role.ec2_s3_role.name
@@ -104,8 +125,8 @@ resource "aws_instance" "web_server_dev" {
   ami                    = var.dev_ami_id != "" ? var.dev_ami_id : data.aws_ami.amazon_linux_2023.id
   instance_type          = var.instance_type
   key_name               = aws_key_pair.key_pair.key_name
-  subnet_id              = aws_subnet.dev_public.id
-  vpc_security_group_ids = [aws_security_group.dev_web_sg.id]
+  subnet_id              = aws_subnet.dev_public_a.id # From dev_vpc.tf
+  vpc_security_group_ids = [aws_security_group.dev_web_sg.id] # From dev_vpc.tf
   iam_instance_profile   = aws_iam_instance_profile.ec2_profile.name
 
   # This script runs on the first boot to set up the Node.js environment.
@@ -127,6 +148,25 @@ resource "aws_instance" "web_server_dev" {
               # Start and enable Apache
               systemctl start httpd
               systemctl enable httpd
+
+              # Install and start the AWS X-Ray daemon for tracing
+              yum install -y aws-xray-daemon
+              systemctl enable xray
+              systemctl start xray
+
+              # Persist application environment so PM2/SSH sessions pick up cloud DB credentials.
+              cat <<'ENVVARS' | sudo tee /etc/profile.d/cloud2006.sh > /dev/null
+              export NODE_ENV=production
+              export AWS_REGION="${var.aws_region}"
+              export AWS_DEFAULT_REGION="${var.aws_region}"
+              export DB_SECRET_NAME="${aws_secretsmanager_secret.dev_db_credentials.name}"
+              export DB_HOST="${aws_db_instance.dev_db.address}"
+              export DB_PORT="${aws_db_instance.dev_db.port}"
+              export DB_NAME="${aws_db_instance.dev_db.db_name}"
+              export DB_USER="${var.db_username}"
+              export DB_PASSWORD="${var.db_password}"
+              ENVVARS
+              sudo chmod 0644 /etc/profile.d/cloud2006.sh
               EOF
 
   tags = {
@@ -160,7 +200,7 @@ resource "aws_launch_template" "web_server_template" {
   key_name      = aws_key_pair.key_pair.key_name
 
   network_interfaces {
-    associate_public_ip_address = true
+    associate_public_ip_address = false
     security_groups             = [aws_security_group.web_sg.id]
   }
 
@@ -183,7 +223,7 @@ resource "aws_lb" "main" {
   name               = "${var.project_name}-alb"
   internal           = false
   load_balancer_type = "application"
-  security_groups    = [aws_security_group.web_sg.id]
+  security_groups    = [aws_security_group.alb_sg.id]
   subnets            = [aws_subnet.public_a.id, aws_subnet.public_b.id]
 }
 
@@ -223,7 +263,7 @@ resource "aws_autoscaling_group" "main" {
   desired_capacity    = var.asg_desired_capacity
   max_size            = var.asg_max_size
   min_size            = var.asg_min_size
-  vpc_zone_identifier = [aws_subnet.public_a.id, aws_subnet.public_b.id]
+  vpc_zone_identifier = [aws_subnet.private_a.id, aws_subnet.private_b.id]
 
   launch_template {
     id      = aws_launch_template.web_server_template[0].id

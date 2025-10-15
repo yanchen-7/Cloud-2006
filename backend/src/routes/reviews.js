@@ -1,7 +1,15 @@
 import express from "express";
 import { pool } from "../mysql.js";
+import { enqueueReview } from "../utils/sqs.js";
 
 const router = express.Router();
+
+function requireAuth(req, res, next) {
+  if (!req.session?.user) {
+    return res.status(401).json({ error: "Authentication required" });
+  }
+  return next();
+}
 
 router.get("/", async (req, res) => {
   try {
@@ -34,17 +42,51 @@ router.get("/", async (req, res) => {
   }
 });
 
-router.post("/", async (req, res) => {
+router.post("/", requireAuth, async (req, res) => {
+  const user = req.session.user;
   try {
-    const { place_id, place_name, address, rating, review_text, author_name } = req.body || {};
-    if (!place_id || rating == null || !review_text || !author_name) {
-      return res.status(400).json({ error: "Missing required fields" });
+    const {
+      place_id,
+      place_name,
+      address,
+      rating,
+      review_text,
+    } = req.body || {};
+
+    const numericRating = Number(rating);
+    const trimmedReview = typeof review_text === "string" ? review_text.trim() : "";
+
+    if (!place_id || Number.isNaN(numericRating) || trimmedReview.length === 0) {
+      return res.status(422).json({ error: "Missing or invalid fields" });
     }
+
+    const clampedRating = Math.min(5, Math.max(1, numericRating));
+
+    const payload = {
+      place_id,
+      place_name: place_name || null,
+      address: address || null,
+      rating: clampedRating,
+      review_text: trimmedReview,
+      author_name: user.username,
+      account_id: user.account_id,
+      submitted_at: new Date().toISOString(),
+    };
+
+    try {
+      const queued = await enqueueReview(payload);
+      if (queued) {
+        return res.status(202).json({ message: "Review accepted for processing" });
+      }
+    } catch (queueError) {
+      console.warn("Failed to enqueue review message. Falling back to direct insert.", queueError);
+    }
+
     await pool.query(
       "INSERT INTO review (place_id, place_name, address, rating, review_text, publish_time, author_name) VALUES (?, ?, ?, ?, ?, NOW(), ?)",
-      [place_id, place_name || null, address || null, rating, review_text, author_name]
+      [payload.place_id, payload.place_name, payload.address, payload.rating, payload.review_text, payload.author_name]
     );
-    res.status(201).json({ message: "Review added successfully" });
+    res.status(201).json({ message: "Review recorded" });
   } catch (e) {
     console.error("/api/reviews POST error:", e);
     res.status(500).json({ error: "Failed to add review" });

@@ -1,12 +1,20 @@
 import express from "express";
 import session from "express-session";
 import path from "path";
+import fs from "fs";
 import { fileURLToPath } from "url";
 import cors from "cors";
 import dotenv from "dotenv";
 
-// Load environment variables from .env file at the very top
-dotenv.config();
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const envPath = path.resolve(__dirname, "../..", ".env");
+if (fs.existsSync(envPath)) {
+  dotenv.config({ path: envPath });
+  console.log(`Loaded environment variables from ${envPath}`);
+} else {
+  dotenv.config();
+}
 
 import { init as initDB } from "./mysql.js";
 import sessionRouter from "./routes/session.js";
@@ -15,12 +23,7 @@ import favouritesRouter from "./routes/favourites.js";
 import reviewsRouter from "./routes/reviews.js";
 import weatherRouter from "./routes/weather.js";
 
-const app = express();
-const PORT = process.env.PORT || 3001;
-const SESSION_SECRET = process.env.SESSION_SECRET || "change-me";
-
-// Initialize the database connection pool
-initDB({
+const dbConfig = {
   host: process.env.DB_HOST,
   port: Number(process.env.DB_PORT || 3306),
   user: process.env.DB_USER,
@@ -30,12 +33,23 @@ initDB({
   connectionLimit: 10,
   namedPlaceholders: true,
   connectTimeout: 10000,
-  ssl: "Amazon RDS",
-});
+  ssl: process.env.DB_SSL_MODE || "Amazon RDS",
+  secretName: process.env.DB_SECRET_NAME,
+  awsRegion: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION,
+};
+
+try {
+  await initDB(dbConfig);
+} catch (err) {
+  console.error("Failed to initialize database pool", err);
+  process.exit(1);
+}
+
+const app = express();
+const PORT = process.env.PORT || 3001;
+const SESSION_SECRET = process.env.SESSION_SECRET || "change-me";
 
 // --- Serve React Frontend ---
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 app.use(express.static(path.join(__dirname, "../../frontend/dist")));
 
 app.use(cors({ origin: process.env.CORS_ORIGIN?.split(",") || ["http://localhost:5173"], credentials: true }));

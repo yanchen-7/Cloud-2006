@@ -25,6 +25,10 @@ export default function Home() {
   const [userLocation, setUserLocation] = useState(null)
   const [isLocating, setIsLocating] = useState(false)
   const [locationError, setLocationError] = useState('')
+  const [session, setSession] = useState(null)
+  const [reviewForm, setReviewForm] = useState({ rating: 5, review_text: '' })
+  const [isSubmittingReview, setIsSubmittingReview] = useState(false)
+  const [reviewFeedback, setReviewFeedback] = useState({ type: null, message: '' })
 
   // Initialize Leaflet icons
   useEffect(() => {
@@ -60,6 +64,21 @@ export default function Home() {
 
   const icons = iconsRef.current
 
+  useEffect(() => {
+    let cancelled = false
+    async function loadSessionState() {
+      try {
+        const response = await fetch('/api/session', { credentials: 'include' })
+        const payload = await response.json()
+        if (!cancelled) setSession(payload)
+      } catch (err) {
+        if (!cancelled) setSession(null)
+      }
+    }
+    loadSessionState()
+    return () => { cancelled = true }
+  }, [])
+
   const loadPlaces = useCallback(async () => {
     setIsLoadingPlaces(true);
     try {
@@ -84,15 +103,23 @@ export default function Home() {
   }, [userLocation]);
 
   const loadSavedPlaces = useCallback(async () => {
-  try {
-    const response = await fetch('/api/favourites');
-    if (!response.ok) throw new Error('Failed to fetch favourites');
-    const data = await response.json();
-    setSavedPlaces(new Set(data.map(fav => fav.place_id)));
-  } catch (err) {
-    console.error('Error loading saved places', err);
-  }
-}, []);
+    if (!session?.authenticated) {
+      setSavedPlaces(new Set())
+      return
+    }
+    try {
+      const response = await fetch('/api/favourites', { credentials: 'include' })
+      if (response.status === 401) {
+        setSavedPlaces(new Set())
+        return
+      }
+      if (!response.ok) throw new Error('Failed to fetch favourites')
+      const data = await response.json()
+      setSavedPlaces(new Set(data.map(fav => fav.place_id)))
+    } catch (err) {
+      console.error('Error loading saved places', err)
+    }
+  }, [session])
 
 
   useEffect(() => {
@@ -100,8 +127,8 @@ export default function Home() {
   }, [loadPlaces])
 
   useEffect(() => {
-  loadSavedPlaces();
-}, [loadSavedPlaces]);
+    loadSavedPlaces()
+  }, [loadSavedPlaces])
 
   // Callback ref to initialize the map safely
   const mapContainerRef = useCallback(node => {
@@ -244,6 +271,11 @@ export default function Home() {
   }, [recommendations.length])
 
   useEffect(() => {
+    setReviewFeedback({ type: null, message: '' })
+    setReviewForm(prev => ({ ...prev, review_text: '' }))
+  }, [selectedPlace])
+
+  useEffect(() => {
     if (typeof window === 'undefined' || recommendations.length <= 1) return
     const timer = window.setInterval(() => {
       setCurrentSlide(prev => (prev + 1) % recommendations.length)
@@ -252,31 +284,97 @@ export default function Home() {
   }, [recommendations.length])
 
   const toggleSavedPlace = useCallback(async (placeId) => {
-  try {
-    setSavedPlaces(prev => {
-      const isSaved = prev.has(placeId);
-      const next = new Set(prev);
-      if (isSaved) {
-        next.delete(placeId);
-        fetch(`/api/favourites/${encodeURIComponent(placeId)}`, {
+    if (!placeId) return
+    if (!session?.authenticated) {
+      alert('Please login to manage your saved places.')
+      return
+    }
+    try {
+      if (savedPlaces.has(placeId)) {
+        const response = await fetch(`/api/favourites/${encodeURIComponent(placeId)}`, {
           method: 'DELETE',
           headers: { 'Content-Type': 'application/json' },
-        }).catch(err => console.error('Error removing favourite', err));
+          credentials: 'include'
+        })
+        if (!response.ok && response.status !== 204) throw new Error('Failed to remove favourite')
+        setSavedPlaces(prev => {
+          const next = new Set(prev)
+          next.delete(placeId)
+          return next
+        })
       } else {
-        next.add(placeId);
-        fetch('/api/favourites', {
+        const response = await fetch('/api/favourites', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ place_id: placeId }),
-        }).catch(err => console.error('Error saving favourite', err));
+          credentials: 'include',
+          body: JSON.stringify({ place_id: placeId })
+        })
+        if (!response.ok) throw new Error('Failed to save favourite')
+        setSavedPlaces(prev => {
+          const next = new Set(prev)
+          next.add(placeId)
+          return next
+        })
       }
-      return next;
-    });
-  } catch (err) {
-    console.error('Error toggling saved place', err);
-  }
-}, []);
+    } catch (err) {
+      console.error('Error toggling saved place', err)
+      alert(err.message || 'Unable to update saved places')
+    }
+  }, [savedPlaces, session])
 
+  const handleReviewFieldChange = useCallback((field, value) => {
+    setReviewForm(prev => ({
+      ...prev,
+      [field]: value,
+    }))
+    if (reviewFeedback.type) {
+      setReviewFeedback({ type: null, message: '' })
+    }
+  }, [reviewFeedback.type])
+
+  const handleReviewSubmit = useCallback(async (event) => {
+    event.preventDefault()
+    if (!session?.authenticated) {
+      setReviewFeedback({ type: 'error', message: 'Please login to submit a review.' })
+      return
+    }
+    if (!selectedPlace) {
+      setReviewFeedback({ type: 'error', message: 'Select a place before submitting a review.' })
+      return
+    }
+    const ratingValue = Number(reviewForm.rating)
+    const clampedRating = Math.min(5, Math.max(1, Number.isFinite(ratingValue) ? ratingValue : 5))
+    const text = reviewForm.review_text.trim()
+    if (!text) {
+      setReviewFeedback({ type: 'error', message: 'Review text cannot be empty.' })
+      return
+    }
+    setIsSubmittingReview(true)
+    try {
+      const response = await fetch('/api/reviews', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          place_id: selectedPlace.place_id,
+          place_name: selectedPlace.name || selectedPlace.place_name || null,
+          address: selectedPlace.formatted_address || selectedPlace.address || null,
+          rating: clampedRating,
+          review_text: text,
+        }),
+      })
+      const payload = await response.json().catch(() => ({}))
+      if (!response.ok) {
+        throw new Error(payload?.error || 'Failed to submit review')
+      }
+      setReviewFeedback({ type: 'success', message: payload?.message || 'Review submitted. It may take a moment to appear.' })
+      setReviewForm({ rating: 5, review_text: '' })
+    } catch (err) {
+      setReviewFeedback({ type: 'error', message: err.message || 'Failed to submit review' })
+    } finally {
+      setIsSubmittingReview(false)
+    }
+  }, [reviewForm, selectedPlace, session])
 
 
   const handleLocateMe = useCallback(() => {
@@ -627,7 +725,42 @@ export default function Home() {
 
                 <section className="user-review" aria-labelledby="userReviewTitle">
                   <h4 id="userReviewTitle"><i className="fas fa-pen-to-square" aria-hidden="true"></i> Share Your Experience</h4>
-                  <p className="panel-placeholder">Sign in via the Profile page to leave a review.</p>
+                  {session?.authenticated ? (
+                    <form className="auth-form review-form" onSubmit={handleReviewSubmit}>
+                      <div className="form-field">
+                        <label htmlFor="reviewRating">Rating</label>
+                        <select
+                          id="reviewRating"
+                          value={reviewForm.rating}
+                          onChange={event => handleReviewFieldChange('rating', event.target.value)}
+                        >
+                          {[5, 4, 3, 2, 1].map(value => (
+                            <option key={value} value={value}>{value} {value === 1 ? 'Star' : 'Stars'}</option>
+                          ))}
+                        </select>
+                      </div>
+                      <div className="form-field">
+                        <label htmlFor="reviewText">Review</label>
+                        <textarea
+                          id="reviewText"
+                          rows="4"
+                          value={reviewForm.review_text}
+                          onChange={event => handleReviewFieldChange('review_text', event.target.value)}
+                          placeholder="Tell other visitors about your experience"
+                          required
+                        />
+                      </div>
+                      {reviewFeedback.type === 'error' && <div className="error">{reviewFeedback.message}</div>}
+                      {reviewFeedback.type === 'success' && <div className="success">{reviewFeedback.message}</div>}
+                      <div className="form-actions">
+                        <button type="submit" className="btn primary" disabled={isSubmittingReview}>
+                          {isSubmittingReview ? 'Submitting...' : 'Submit Review'}
+                        </button>
+                      </div>
+                    </form>
+                  ) : (
+                    <p className="panel-placeholder">Sign in via the Profile page to leave a review.</p>
+                  )}
                 </section>
               </div>
             )}

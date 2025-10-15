@@ -10,7 +10,6 @@ function requireAuth(req, res, next) {
 
 router.get("/", requireAuth, async (req, res) => {
   try {
-    console.log("Session user:", req.session.user);
     const accountId = req.session.user.account_id;
     const [rows] = await pool.query(
     `SELECT uf.place_id, uf.added_at,
