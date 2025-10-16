@@ -26,7 +26,9 @@ resource "aws_secretsmanager_secret_version" "prod_db_credentials_version" {
   secret_string = jsonencode({
     username = var.db_username
     password = random_password.prod_db_password[0].result
-    dbname   = aws_db_instance.dev_db.db_name
+    dbname   = aws_db_instance.prod_db[0].db_name
+    host     = aws_db_instance.prod_db[0].address
+    port     = aws_db_instance.prod_db[0].port
   })
 }
 

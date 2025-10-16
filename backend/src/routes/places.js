@@ -2,8 +2,26 @@
 import express from "express";
 import { pool } from "../mysql.js";
 import { exec } from "child_process";
+import { getJson as getCachedJson, setJson as setCachedJson } from "../cache/redis.js";
 
 const router = express.Router();
+
+const DEFAULT_LIST_TTL = 300;
+const DEFAULT_DETAIL_TTL = 120;
+
+function resolveTtl(value, fallback) {
+  if (value === undefined) return fallback;
+  const parsed = Number(value);
+  if (Number.isFinite(parsed) && parsed >= 0) {
+    return Math.floor(parsed);
+  }
+  return fallback;
+}
+
+const listTtl = resolveTtl(process.env.PLACES_CACHE_TTL_SECONDS, DEFAULT_LIST_TTL);
+const detailTtl = resolveTtl(process.env.PLACE_CACHE_TTL_SECONDS, DEFAULT_DETAIL_TTL);
+
+const LIST_CACHE_KEY = "places:all";
 
 /**
  * Safely parses the opening_hours JSON string from the database.
@@ -26,6 +44,11 @@ function parseOpeningHours(hoursString) {
 
 router.get("/", async (_req, res) => {
   try {
+    const cachedPlaces = await getCachedJson(LIST_CACHE_KEY);
+    if (cachedPlaces) {
+      return res.json(cachedPlaces);
+    }
+
     const [rows] = await pool.query(
       // Align with existing schema in database.txt; alias to keep frontend fields consistent
       `SELECT
@@ -48,6 +71,9 @@ router.get("/", async (_req, res) => {
       ...place,
       opening_hours: parseOpeningHours(place.opening_hours),
     }));
+    if (listTtl > 0) {
+      await setCachedJson(LIST_CACHE_KEY, places, listTtl);
+    }
     res.json(places);
   } catch (e) {
     // Enhanced error logging to capture more details
@@ -61,6 +87,12 @@ router.get("/", async (_req, res) => {
 router.get("/:placeId", async (req, res) => {
   try {
     const placeId = req.params.placeId;
+    const cacheKey = `places:${placeId}`;
+    const cachedPlace = await getCachedJson(cacheKey);
+    if (cachedPlace) {
+      return res.json(cachedPlace);
+    }
+
     const [rows] = await pool.query(
       `SELECT
          place_id,
@@ -98,6 +130,9 @@ router.get("/:placeId", async (req, res) => {
       average: summaryRows?.[0]?.average_rating != null ? Number(summaryRows[0].average_rating) : null,
     };
     const place = { ...placeData, user_reviews: reviews, user_reviews_summary: summary };
+    if (detailTtl > 0) {
+      await setCachedJson(cacheKey, place, detailTtl);
+    }
     res.json(place);
   } catch (e) {
     console.error(`/api/places/${req.params.placeId} error:`, {

@@ -118,10 +118,58 @@ resource "aws_vpc_endpoint" "sts" {
   }
 }
 
-resource "aws_vpc_endpoint" "xray" {
-  count = var.enable_prod_env ? 1 : 0
-
+resource "aws_vpc_endpoint" "ssm" {
   vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.aws_region}.ssm"
+  vpc_endpoint_type   = "Interface"
+  private_dns_enabled = true
+
+  subnet_ids = [
+    aws_subnet.private_a.id,
+    aws_subnet.private_b.id
+  ]
+  security_group_ids = [aws_security_group.endpoint_sg.id]
+
+  tags = {
+    Name = "${var.project_name}-ssm-endpoint"
+  }
+}
+
+resource "aws_vpc_endpoint" "ssmmessages" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.aws_region}.ssmmessages"
+  vpc_endpoint_type   = "Interface"
+
+  subnet_ids = [
+    aws_subnet.private_a.id,
+    aws_subnet.private_b.id
+  ]
+  security_group_ids = [aws_security_group.endpoint_sg.id]
+
+  tags = {
+    Name = "${var.project_name}-ssmmessages-endpoint"
+  }
+}
+
+resource "aws_vpc_endpoint" "ec2messages" {
+  vpc_id              = aws_vpc.main.id
+  service_name        = "com.amazonaws.${var.aws_region}.ec2messages"
+  vpc_endpoint_type   = "Interface"
+
+  subnet_ids = [
+    aws_subnet.private_a.id,
+    aws_subnet.private_b.id
+  ]
+  security_group_ids = [aws_security_group.endpoint_sg.id]
+
+  tags = {
+    Name = "${var.project_name}-ec2messages-endpoint"
+  }
+}
+
+resource "aws_vpc_endpoint" "xray" {
+  vpc_id              = aws_vpc.main.id
+  count               = var.enable_prod_env ? 1 : 0
   service_name        = "com.amazonaws.${var.aws_region}.xray"
   vpc_endpoint_type   = "Interface"
   private_dns_enabled = true

@@ -75,21 +75,33 @@ resource "aws_db_instance" "dev_db" {
 # --- Production RDS Environment (Cloned from Dev) ---
 
 # Production RDS Instance, created from the snapshot of the dev database.
+# This resource creates a snapshot of the dev database when `var.refresh_prod_db` is true.
+resource "aws_db_snapshot" "dev_db_snapshot" {
+  count = var.enable_prod_env && var.refresh_prod_db ? 1 : 0
+
+  db_instance_identifier = aws_db_instance.dev_db.identifier
+  db_snapshot_identifier = "${var.project_name}-dev-snapshot-${formatdate("YYYYMMDDhhmmss", timestamp())}"
+
+  tags = {
+    Name = "${var.project_name}-dev-snapshot-for-prod"
+  }
+}
+
+# Production RDS Instance. It's created from a snapshot if `refresh_prod_db` is true.
 resource "aws_db_instance" "prod_db" {
   count = var.enable_prod_env ? 1 : 0
 
-  identifier             = "${var.project_name}-prod-db"
-  # snapshot_identifier is removed to create a new, empty database.
-  # You can manage its schema and data manually via MySQL Workbench.
-  db_name                = "cloud2006db" # Same as dev for consistency
-  engine                 = "mysql"
-  engine_version         = "8.0"
-  allocated_storage      = 20
-  storage_type           = "gp2"
-  username               = var.db_username
-  # The password will be set by the local-exec provisioner below.
-  password               = random_password.prod_db_password[0].result
-  instance_class         = var.db_instance_class
+  identifier          = "${var.project_name}-prod-db"
+  snapshot_identifier = var.refresh_prod_db ? aws_db_snapshot.dev_db_snapshot[0].id : null
+
+  # When creating from a snapshot, some attributes are inherited and cannot be set.
+  # When creating a new DB, these are required.
+  db_name             = var.refresh_prod_db ? null : "cloud2006db"
+  engine              = "mysql"
+  engine_version      = "8.0"
+  allocated_storage   = var.refresh_prod_db ? null : 20
+  storage_type        = "gp2"
+  instance_class      = var.db_instance_class
   vpc_security_group_ids = [aws_security_group.db_sg.id]
   db_subnet_group_name   = aws_db_subnet_group.db_subnet_group.name
 
@@ -98,6 +110,10 @@ resource "aws_db_instance" "prod_db" {
   deletion_protection = true
   skip_final_snapshot = false
   final_snapshot_identifier = "${var.project_name}-prod-db-final-snapshot"
+  apply_immediately   = true # Apply changes immediately, including password updates.
+
+  # Set/update the master password. This will be applied after the instance is created from the snapshot.
+  password = random_password.prod_db_password[0].result
 
   # Enable Enhanced Monitoring at a 60-second interval
   monitoring_interval    = 60

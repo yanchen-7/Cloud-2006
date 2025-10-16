@@ -1,6 +1,7 @@
 import json
 import logging
 import os
+from decimal import Decimal, InvalidOperation
 
 import boto3
 import pymysql
@@ -76,20 +77,36 @@ def _detect_sentiment(text):
         return None
 
 
+def _coerce_rating(value):
+    if value is None:
+        return None
+    if isinstance(value, (int, float, Decimal)):
+        return int(max(1, min(5, round(float(value)))))
+    try:
+        parsed = float(value)
+    except (TypeError, ValueError, InvalidOperation):
+        return None
+    return int(max(1, min(5, round(parsed))))
+
+
 def _persist_review(record):
     connection = _get_connection()
     with connection.cursor() as cursor:
+        rating = _coerce_rating(record.get("rating"))
+        submitted_at = record.get("submitted_at")
+
         cursor.execute(
             """
             INSERT INTO review (place_id, place_name, address, rating, review_text, publish_time, author_name)
-            VALUES (%s, %s, %s, %s, %s, NOW(), %s)
+            VALUES (%s, %s, %s, %s, %s, COALESCE(%s, NOW()), %s)
             """,
             (
                 record.get("place_id"),
                 record.get("place_name"),
                 record.get("address"),
-                record.get("rating"),
+                rating,
                 record.get("review_text"),
+                submitted_at,
                 record.get("author_name") or "Anonymous",
             ),
         )
@@ -108,7 +125,7 @@ def lambda_handler(event, _context):
             if not body:
                 continue
             data = json.loads(body)
-            data.setdefault("rating", 0)
+            data.setdefault("rating", None)
             data.setdefault("author_name", "Anonymous")
             sentiment = _detect_sentiment(data.get("review_text"))
             if sentiment:

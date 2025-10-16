@@ -22,6 +22,8 @@ import placesRouter from "./routes/places.js";
 import favouritesRouter from "./routes/favourites.js";
 import reviewsRouter from "./routes/reviews.js";
 import weatherRouter from "./routes/weather.js";
+import { initRedis, closeRedis } from "./cache/redis.js";
+import { apiRateLimiter, placesRateLimiter } from "./middleware/rateLimiter.js";
 
 const dbConfig = {
   host: process.env.DB_HOST,
@@ -45,15 +47,26 @@ try {
   process.exit(1);
 }
 
+try {
+  await initRedis();
+} catch (err) {
+  console.warn("Redis initialization failed; continuing without cache.", err);
+}
+
 const app = express();
 const PORT = process.env.PORT || 3001;
 const SESSION_SECRET = process.env.SESSION_SECRET || "change-me";
+
+// Behind CloudFront/ALB so trust the forwarded headers for real client IPs
+app.set("trust proxy", 2);
 
 // --- Serve React Frontend ---
 app.use(express.static(path.join(__dirname, "../../frontend/dist")));
 
 app.use(cors({ origin: process.env.CORS_ORIGIN?.split(",") || ["http://localhost:5173"], credentials: true }));
 app.use(express.json());
+app.use("/api", apiRateLimiter);
+app.use("/api/places", placesRateLimiter);
 app.use(session({
   secret: SESSION_SECRET,
   resave: false,
@@ -105,3 +118,17 @@ app.listen(PORT, () => {
   // Diagnostic log to verify environment variables are loaded
   console.log(`Attempting to connect to DB_HOST: ${process.env.DB_HOST || "NOT SET (defaulting to localhost)"}`);
 });
+
+for (const signal of ["SIGINT", "SIGTERM"]) {
+  process.on(signal, async () => {
+    console.log(`\nReceived ${signal}, shutting down gracefully...`);
+    try {
+      await closeRedis();
+      await pool.end();
+      console.log("Resources closed.");
+    } catch (err) {
+      console.error("Error during graceful shutdown:", err);
+    }
+    process.exit(0);
+  });
+}

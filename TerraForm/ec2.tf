@@ -83,6 +83,11 @@ resource "aws_iam_role_policy_attachment" "cloudwatch_agent_policy_attach" {
   policy_arn = "arn:aws:iam::aws:policy/CloudWatchAgentServerPolicy"
 }
 
+resource "aws_iam_role_policy_attachment" "ssm_core_policy_attach" {
+  role       = aws_iam_role.ec2_s3_role.name
+  policy_arn = "arn:aws:iam::aws:policy/AmazonSSMManagedInstanceCore"
+}
+
 resource "aws_iam_role_policy_attachment" "read_prod_db_secret_attach" {
   count      = var.enable_prod_env ? 1 : 0
   role       = aws_iam_role.ec2_s3_role.name
@@ -165,6 +170,13 @@ resource "aws_instance" "web_server_dev" {
               export DB_NAME="${aws_db_instance.dev_db.db_name}"
               export DB_USER="${var.db_username}"
               export DB_PASSWORD="${var.db_password}"
+              export REVIEW_QUEUE_URL="${var.enable_prod_env ? aws_sqs_queue.review_processing_queue[0].url : ""}"
+              export REDIS_HOST="${var.enable_prod_env ? aws_elasticache_cluster.prod_cache[0].cache_nodes[0].address : ""}"
+              export REDIS_PORT="${var.enable_prod_env ? aws_elasticache_cluster.prod_cache[0].cache_nodes[0].port : 6379}"
+              export RATE_LIMIT_WINDOW_MS=60000
+              export RATE_LIMIT_MAX=300
+              export PLACES_RATE_LIMIT_WINDOW_MS=60000
+              export PLACES_RATE_LIMIT_MAX=120
               ENVVARS
               sudo chmod 0644 /etc/profile.d/cloud2006.sh
               EOF
@@ -200,13 +212,54 @@ resource "aws_launch_template" "web_server_template" {
   key_name      = aws_key_pair.key_pair.key_name
 
   network_interfaces {
-    associate_public_ip_address = false
+    associate_public_ip_address = true
     security_groups             = [aws_security_group.web_sg.id]
   }
 
   iam_instance_profile {
     name = aws_iam_instance_profile.ec2_profile.name
   }
+
+  user_data = base64encode(<<-EOF
+              #!/bin/bash
+              # Update all packages
+              yum update -y
+
+              # Install Git
+              yum install -y git
+
+              # Install Node.js v18 and npm
+              curl -sL https://rpm.nodesource.com/setup_18.x | bash -
+              yum install -y nodejs
+
+              # Install PM2 globally (a process manager for Node.js)
+              npm install pm2 -g
+
+              # Install and start the AWS X-Ray daemon for tracing
+              yum install -y aws-xray-daemon
+              systemctl enable xray
+              systemctl start xray
+
+              # Persist application environment so PM2/SSH sessions pick up cloud DB credentials.
+              cat <<'ENVVARS' | sudo tee /etc/profile.d/cloud2006.sh > /dev/null
+              export NODE_ENV=production
+              export AWS_REGION="${var.aws_region}"
+              export AWS_DEFAULT_REGION="${var.aws_region}"
+              export DB_SECRET_NAME="${aws_secretsmanager_secret.prod_db_credentials[0].name}"
+              export DB_HOST="${aws_db_instance.prod_db[0].address}"
+              export DB_PORT="${tostring(aws_db_instance.prod_db[0].port)}"
+              export DB_NAME="${aws_db_instance.prod_db[0].db_name}"
+              export REVIEW_QUEUE_URL="${aws_sqs_queue.review_processing_queue[0].url}"
+              export REDIS_HOST="${aws_elasticache_cluster.prod_cache[0].cache_nodes[0].address}"
+              export REDIS_PORT="${tostring(aws_elasticache_cluster.prod_cache[0].cache_nodes[0].port)}"
+              export RATE_LIMIT_WINDOW_MS=60000
+              export RATE_LIMIT_MAX=300
+              export PLACES_RATE_LIMIT_WINDOW_MS=60000
+              export PLACES_RATE_LIMIT_MAX=120
+              ENVVARS
+              sudo chmod 0644 /etc/profile.d/cloud2006.sh
+              EOF
+            )
 
   tag_specifications {
     resource_type = "instance"
@@ -236,9 +289,9 @@ resource "aws_lb_target_group" "main" {
   vpc_id   = aws_vpc.main.id
 
   health_check {
-    path                = "/"
+    path                = "/api/health"
     protocol            = "HTTP"
-    matcher             = "200"
+    matcher             = "200-399"
   }
 }
 
@@ -263,7 +316,7 @@ resource "aws_autoscaling_group" "main" {
   desired_capacity    = var.asg_desired_capacity
   max_size            = var.asg_max_size
   min_size            = var.asg_min_size
-  vpc_zone_identifier = [aws_subnet.private_a.id, aws_subnet.private_b.id]
+  vpc_zone_identifier = [aws_subnet.public_a.id, aws_subnet.public_b.id]
 
   launch_template {
     id      = aws_launch_template.web_server_template[0].id

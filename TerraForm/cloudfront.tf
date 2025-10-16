@@ -1,5 +1,50 @@
 # --- 15. CloudFront Distributions ---
 
+resource "aws_cloudfront_cache_policy" "api_places" {
+  provider = aws.us_east_1
+
+  name        = "${var.project_name}-api-places-cache"
+  default_ttl = 120
+  max_ttl     = 300
+  min_ttl     = 0
+
+  parameters_in_cache_key_and_forwarded_to_origin {
+    cookies_config {
+      cookie_behavior = "none"
+    }
+    headers_config {
+      header_behavior = "whitelist"
+      headers {
+        items = ["Origin"]
+      }
+    }
+    query_strings_config {
+      query_string_behavior = "all"
+    }
+  }
+}
+
+resource "aws_cloudfront_origin_request_policy" "api_places" {
+  provider = aws.us_east_1
+
+  name = "${var.project_name}-api-places-origin"
+
+  cookies_config {
+    cookie_behavior = "none"
+  }
+
+  headers_config {
+    header_behavior = "whitelist"
+    headers {
+      items = ["Origin"]
+    }
+  }
+
+  query_strings_config {
+    query_string_behavior = "all"
+  }
+}
+
 # --- Production CloudFront Distribution ---
 resource "aws_cloudfront_distribution" "prod_distribution" {
   provider = aws.us_east_1 # WAF for CloudFront requires the distribution to be in us-east-1 for association
@@ -37,6 +82,17 @@ resource "aws_cloudfront_distribution" "prod_distribution" {
     # 'Managed-AllViewer' forwards all headers, query strings, and cookies to your application.
     cache_policy_id        = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # Managed-CachingDisabled
     origin_request_policy_id = "216adef6-5c7f-47e4-b989-5492eafa07d3" # Managed-AllViewer
+  }
+
+  ordered_cache_behavior {
+    path_pattern     = "/api/places*"
+    allowed_methods  = ["GET", "HEAD", "OPTIONS"]
+    cached_methods   = ["GET", "HEAD"]
+    target_origin_id = "${var.project_name}-prod-alb-origin"
+
+    viewer_protocol_policy   = "redirect-to-https"
+    cache_policy_id          = aws_cloudfront_cache_policy.api_places.id
+    origin_request_policy_id = aws_cloudfront_origin_request_policy.api_places.id
   }
 
   # Associate the WAF directly. This is more reliable than a separate association resource.
@@ -92,6 +148,17 @@ resource "aws_cloudfront_distribution" "dev_distribution" {
 
     cache_policy_id        = "4135ea2d-6df8-44a3-9df3-4b5a84be39ad" # Managed-CachingDisabled
     origin_request_policy_id = "216adef6-5c7f-47e4-b989-5492eafa07d3" # Managed-AllViewer
+  }
+
+  ordered_cache_behavior {
+    path_pattern     = "/api/places*"
+    allowed_methods  = ["GET", "HEAD", "OPTIONS"]
+    cached_methods   = ["GET", "HEAD"]
+    target_origin_id = "${var.project_name}-dev-ec2-origin"
+
+    viewer_protocol_policy   = "redirect-to-https"
+    cache_policy_id          = aws_cloudfront_cache_policy.api_places.id
+    origin_request_policy_id = aws_cloudfront_origin_request_policy.api_places.id
   }
 
   # Associate the WAF directly. This is more reliable than a separate association resource.

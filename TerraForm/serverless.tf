@@ -66,6 +66,16 @@ resource "aws_iam_policy" "review_lambda_permissions" {
       },
       {
         Effect   = "Allow",
+        Action   = [
+          "rds:DescribeDBInstances",
+          "rds:DescribeDBClusters",
+          "rds:DescribeDBSubnetGroups",
+          "rds:DescribeDBSecurityGroups"
+        ],
+        Resource = "*"
+      },
+      {
+        Effect   = "Allow",
         Action   = ["secretsmanager:GetSecretValue"],
         Resource = aws_secretsmanager_secret.prod_db_credentials[0].arn
       }
@@ -111,8 +121,8 @@ resource "aws_lambda_function" "review_processor" {
     variables = {
       DB_SECRET_NAME = aws_secretsmanager_secret.prod_db_credentials[0].name
       DB_HOST        = aws_db_instance.prod_db[0].address
-      DB_NAME        = aws_db_instance.dev_db.db_name
-      DB_PORT        = tostring(aws_db_instance.dev_db.port)
+      DB_NAME        = aws_db_instance.prod_db[0].db_name
+      DB_PORT        = tostring(aws_db_instance.prod_db[0].port)
     }
   }
 
@@ -167,10 +177,46 @@ resource "aws_apigatewayv2_route" "default" {
   target    = "integrations/${aws_apigatewayv2_integration.alb_proxy[0].id}"
 }
 
+resource "aws_apigatewayv2_route" "places_collection" {
+  count = var.enable_prod_env ? 1 : 0
+
+  api_id    = aws_apigatewayv2_api.main[0].id
+  route_key = "GET /api/places"
+  target    = "integrations/${aws_apigatewayv2_integration.alb_proxy[0].id}"
+}
+
+resource "aws_apigatewayv2_route" "places_detail" {
+  count = var.enable_prod_env ? 1 : 0
+
+  api_id    = aws_apigatewayv2_api.main[0].id
+  route_key = "GET /api/places/{placeId}"
+  target    = "integrations/${aws_apigatewayv2_integration.alb_proxy[0].id}"
+}
+
 resource "aws_apigatewayv2_stage" "prod" {
   count = var.enable_prod_env ? 1 : 0
 
   api_id      = aws_apigatewayv2_api.main[0].id
   name        = "$default"
   auto_deploy = true
+
+  default_route_settings {
+    throttling_burst_limit = 200
+    throttling_rate_limit  = 100
+    detailed_metrics_enabled = true
+  }
+
+  route_settings {
+    route_key                = "GET /api/places"
+    throttling_burst_limit   = 60
+    throttling_rate_limit    = 30
+    detailed_metrics_enabled = true
+  }
+
+  route_settings {
+    route_key                = "GET /api/places/{placeId}"
+    throttling_burst_limit   = 40
+    throttling_rate_limit    = 20
+    detailed_metrics_enabled = true
+  }
 }
