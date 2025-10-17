@@ -86,3 +86,19 @@ variable "refresh_prod_db" {
   type        = bool
   default     = false
 }
+
+variable "enabled_endpoints" {
+  description = "A map to control which VPC endpoints are created. Set a service to true to enable its endpoint."
+  type        = map(bool)
+  default = {
+    "s3"              = true
+    "sqs"             = false
+    "comprehend"      = false
+    "secrets_manager" = true
+    "logs"            = false
+    "ec2"             = false
+    "sts"             = false
+    "ssm"             = false
+    "xray"            = false
+  }
+}

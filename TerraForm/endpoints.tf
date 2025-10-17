@@ -5,6 +5,8 @@
 # --- Gateway Endpoint for S3 ---
 # Gateway endpoints are free and are used for S3 and DynamoDB.
 resource "aws_vpc_endpoint" "s3" {
+  count = lookup(var.enabled_endpoints, "s3", false) ? 1 : 0
+
   vpc_id       = aws_vpc.main.id
   service_name = "com.amazonaws.${var.aws_region}.s3"
   route_table_ids = [
@@ -21,7 +23,7 @@ resource "aws_vpc_endpoint" "s3" {
 # These are required for the Lambda function to access services from within the VPC.
 
 resource "aws_vpc_endpoint" "sqs" {
-  count = var.enable_prod_env ? 1 : 0
+  count = var.enable_prod_env && lookup(var.enabled_endpoints, "sqs", false) ? 1 : 0
 
   vpc_id              = aws_vpc.main.id
   service_name        = "com.amazonaws.${var.aws_region}.sqs"
@@ -36,7 +38,7 @@ resource "aws_vpc_endpoint" "sqs" {
 }
 
 resource "aws_vpc_endpoint" "comprehend" {
-  count = var.enable_prod_env ? 1 : 0
+  count = var.enable_prod_env && lookup(var.enabled_endpoints, "comprehend", false) ? 1 : 0
 
   vpc_id              = aws_vpc.main.id
   service_name        = "com.amazonaws.${var.aws_region}.comprehend"
@@ -51,6 +53,8 @@ resource "aws_vpc_endpoint" "comprehend" {
 }
 
 resource "aws_vpc_endpoint" "secrets_manager" {
+  count = lookup(var.enabled_endpoints, "secrets_manager", false) ? 1 : 0
+
   vpc_id              = aws_vpc.main.id
   service_name        = "com.amazonaws.${var.aws_region}.secretsmanager"
   vpc_endpoint_type   = "Interface"
@@ -68,6 +72,8 @@ resource "aws_vpc_endpoint" "secrets_manager" {
 }
 
 resource "aws_vpc_endpoint" "logs" {
+  count = lookup(var.enabled_endpoints, "logs", false) ? 1 : 0
+
   vpc_id              = aws_vpc.main.id
   service_name        = "com.amazonaws.${var.aws_region}.logs"
   vpc_endpoint_type   = "Interface"
@@ -85,6 +91,8 @@ resource "aws_vpc_endpoint" "logs" {
 }
 
 resource "aws_vpc_endpoint" "ec2" {
+  count = lookup(var.enabled_endpoints, "ec2", false) ? 1 : 0
+
   vpc_id              = aws_vpc.main.id
   service_name        = "com.amazonaws.${var.aws_region}.ec2"
   vpc_endpoint_type   = "Interface"
@@ -102,6 +110,8 @@ resource "aws_vpc_endpoint" "ec2" {
 }
 
 resource "aws_vpc_endpoint" "sts" {
+  count = lookup(var.enabled_endpoints, "sts", false) ? 1 : 0
+
   vpc_id              = aws_vpc.main.id
   service_name        = "com.amazonaws.${var.aws_region}.sts"
   vpc_endpoint_type   = "Interface"
@@ -119,6 +129,8 @@ resource "aws_vpc_endpoint" "sts" {
 }
 
 resource "aws_vpc_endpoint" "ssm" {
+  count = lookup(var.enabled_endpoints, "ssm", false) ? 1 : 0
+
   vpc_id              = aws_vpc.main.id
   service_name        = "com.amazonaws.${var.aws_region}.ssm"
   vpc_endpoint_type   = "Interface"
@@ -136,6 +148,8 @@ resource "aws_vpc_endpoint" "ssm" {
 }
 
 resource "aws_vpc_endpoint" "ssmmessages" {
+  count = lookup(var.enabled_endpoints, "ssm", false) ? 1 : 0
+
   vpc_id              = aws_vpc.main.id
   service_name        = "com.amazonaws.${var.aws_region}.ssmmessages"
   vpc_endpoint_type   = "Interface"
@@ -152,6 +166,8 @@ resource "aws_vpc_endpoint" "ssmmessages" {
 }
 
 resource "aws_vpc_endpoint" "ec2messages" {
+  count = lookup(var.enabled_endpoints, "ssm", false) ? 1 : 0
+
   vpc_id              = aws_vpc.main.id
   service_name        = "com.amazonaws.${var.aws_region}.ec2messages"
   vpc_endpoint_type   = "Interface"
@@ -169,7 +185,7 @@ resource "aws_vpc_endpoint" "ec2messages" {
 
 resource "aws_vpc_endpoint" "xray" {
   vpc_id              = aws_vpc.main.id
-  count               = var.enable_prod_env ? 1 : 0
+  count               = var.enable_prod_env && lookup(var.enabled_endpoints, "xray", false) ? 1 : 0
   service_name        = "com.amazonaws.${var.aws_region}.xray"
   vpc_endpoint_type   = "Interface"
   private_dns_enabled = true
@@ -201,6 +217,8 @@ resource "aws_security_group" "dev_endpoint_sg" {
 }
 
 resource "aws_vpc_endpoint" "dev_s3" {
+  count = lookup(var.enabled_endpoints, "s3", false) ? 1 : 0
+
   vpc_id       = aws_vpc.dev.id
   service_name = "com.amazonaws.${var.aws_region}.s3"
   route_table_ids = [
@@ -214,6 +232,8 @@ resource "aws_vpc_endpoint" "dev_s3" {
 }
 
 resource "aws_vpc_endpoint" "dev_ec2" {
+  count = lookup(var.enabled_endpoints, "ec2", false) ? 1 : 0
+
   vpc_id              = aws_vpc.dev.id
   service_name        = "com.amazonaws.${var.aws_region}.ec2"
   vpc_endpoint_type   = "Interface"
@@ -227,6 +247,8 @@ resource "aws_vpc_endpoint" "dev_ec2" {
 }
 
 resource "aws_vpc_endpoint" "dev_sts" {
+  count = lookup(var.enabled_endpoints, "sts", false) ? 1 : 0
+
   vpc_id              = aws_vpc.dev.id
   service_name        = "com.amazonaws.${var.aws_region}.sts"
   vpc_endpoint_type   = "Interface"
