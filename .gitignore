@@ -15,6 +15,7 @@ __pycache__/
 
 # Terraform state and credentials
 .terraform/
+.terraform.lock.hcl
 *.tfstate
 *.tfstate.*
 *.tfvars
@@ -75,4 +76,12 @@ TerraForm/*.backup
 TerraForm/*.zip
 
 # Local outputs
-sample/out/
+sample
+
+# Repo-root virtualenv
+/.venv/
+
+# Terraform plan files
+tfplan
+
+

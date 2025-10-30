@@ -73,3 +73,54 @@ npm run dev
 - Legacy Flask code and the local SQLite database have been removed; Python utilities used for data prep are still available in case they are needed offline.
 - Ensure your web server prevents direct access to `/var/www/private` while keeping it readable by PHP.
 - Update DNS/virtual host rules so that `/static` continues to be served directly to avoid routing through PHP for assets. For Node/React dev, Vite serves assets.
+
+# Big Data Recommendation Engine
+
+This add-on introduces a low-cost, batch recommendation pipeline using Amazon EMR (Hadoop + Spark), S3, EventBridge Scheduler, and Athena.
+
+Data flow:
+- S3 `raw/` → EMR Spark job → S3 `curated/recommendations/` (Parquet)
+- Athena Workgroup + Table for ad-hoc queries
+- EventBridge runs daily at 1 AM SGT (17:00 UTC) and submits the Spark step to EMR
+
+What was added (no changes to existing infra):
+- EMR cluster `emr-7.2.0` with Hadoop/Spark
+  - Instance Fleets: master On-Demand (1), core on Spot (50% of On-Demand)
+  - Public subnet for outbound access
+  - Auto-termination after 10 minutes idle
+- IAM roles for EMR service/EC2, Scheduler role scoped to AddJobFlowSteps
+- S3 prefixes for `raw/`, `curated/`, `curated/recommendations/`, `athena-results/`
+- Lifecycle rule to expire `log/` after 30 days on the main bucket
+- Athena Workgroup + Database + external table `recommendations`
+- PySpark job uploaded to `s3://<main-bucket>/jobs/poi_recommender.py`
+
+Run schedule:
+- 01:00 SGT (17:00 UTC): EventBridge calls AddJobFlowSteps to run the Spark job.
+  - Important: AddJobFlowSteps requires the EMR cluster to be RUNNING at that time.
+  - Because auto-termination is enabled, the cluster will shut down when idle. If it is terminated at 01:00 SGT, the step will fail. Start the cluster beforehand or switch to an ephemeral RunJobFlow schedule.
+
+Manual triggers:
+- Start the EMR cluster (if terminated), then submit a one-off step via AWS Console (EMR → your cluster → Steps → Add step) with:
+  - Jar: `command-runner.jar`
+  - Args: `spark-submit s3://<main-bucket>/jobs/poi_recommender.py --raw s3://<main-bucket>/raw/ --poi s3://<main-bucket>/raw/poi/ --output s3://<main-bucket>/curated/recommendations/ --topn 20`
+
+Outputs to use:
+- EMR cluster name: `terraform output recommender_emr_cluster_name`
+- Script path: `terraform output recommender_script_s3_path`
+- Recommendations prefix: `terraform output recommendations_s3_prefix`
+- Athena DB/Table: `terraform output recommender_athena_db`, `terraform output recommender_athena_table`
+
+Cost & scaling notes:
+- Core nodes use Spot (50% of On-Demand bid). Adjust `recommender_core_instance_count` and instance types to tune cost.
+- Auto-termination is enabled. If you rely on the daily scheduler, ensure the cluster is running at 01:00 SGT or switch to an ephemeral RunJobFlow schedule.
+- Athena is for ad-hoc queries only; results stored under `athena-results/`.
+
+Accepted input headers (no need to rename):
+- user: `user_id` | `USER_ID` | `account_id` | `ACCOUNT_ID`
+- item: `item_id` | `ITEM_ID` | `place_id` | `PLACE_ID`
+- timestamp: `timestamp` | `TIMESTAMP` | `clicked_at` | `CLICKED_AT`
+- event_type: `event_type` | `EVENT_TYPE` (defaults to `CLICK` if missing)
+
+Tagging:
+- All resources tagged with `Project`, `Environment`, `Owner` (from variables `project_name`, `recommender_environment`, `recommender_owner`).
+
