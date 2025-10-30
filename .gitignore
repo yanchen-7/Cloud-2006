@@ -15,11 +15,10 @@ __pycache__/
 
 # Terraform state and credentials
 .terraform/
-.terraform.lock.hcl
 *.tfstate
 *.tfstate.*
 *.tfvars
-/Terraform/node_modules
+/TerraForm/node_modules
 
 # Private keys
 *.pem
@@ -65,10 +64,15 @@ Thumbs.db
 .history/
 
 # --- Terraform ---
-Terraform/.terraform
+TerraForm/.terraform/
 cloud-2006-key.pem
-Terraform/terraform.tfvars
-Terraform/.venv
-Terraform/.terraform.lock.hcl
-Terraform/terraform.tfstate
-Terraform/terraform.tfstate.backup
+TerraForm/terraform.tfvars
+TerraForm/.venv/
+TerraForm/terraform.tfstate
+TerraForm/terraform.tfstate.backup
+TerraForm/terraform.tfstate.*
+TerraForm/*.backup
+TerraForm/*.zip
+
+# Local outputs
+sample/out/
