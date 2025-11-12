@@ -26,6 +26,13 @@ data "aws_iam_policy_document" "emr_service_policy" {
     actions = [
       "elasticmapreduce:*",
       "ec2:Describe*",
+      "ec2:CreateSecurityGroup",
+      "ec2:DeleteSecurityGroup",
+      "ec2:AuthorizeSecurityGroupIngress",
+      "ec2:AuthorizeSecurityGroupEgress",
+      "ec2:RevokeSecurityGroupIngress",
+      "ec2:RevokeSecurityGroupEgress",
+      "ec2:CreateTags",
       "cloudwatch:*",
       "logs:*",
       "iam:PassRole"
@@ -42,6 +49,11 @@ resource "aws_iam_policy" "emr_service_policy" {
 resource "aws_iam_role_policy_attachment" "emr_service_attach" {
   role       = aws_iam_role.emr_service_role.name
   policy_arn = aws_iam_policy.emr_service_policy.arn
+}
+
+resource "aws_iam_role_policy_attachment" "emr_service_managed_attach" {
+  role       = aws_iam_role.emr_service_role.name
+  policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonElasticMapReduceRole"
 }
 
 # EMR EC2 Instance Profile Role
@@ -94,6 +106,14 @@ data "aws_iam_policy_document" "emr_ec2_s3" {
     effect   = "Allow"
     actions  = ["ec2:Describe*","cloudwatch:*","iam:PassRole"]
     resources = ["*"]
+  }
+  statement {
+    effect = "Allow"
+    actions = [
+      "secretsmanager:GetSecretValue",
+      "secretsmanager:DescribeSecret"
+    ]
+    resources = [local.recommender_db_secret_arn]
   }
 }
 

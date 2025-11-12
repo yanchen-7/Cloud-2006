@@ -28,3 +28,8 @@ variable "recommender_step_hour_utc" {
   default     = 17
 }
 
+variable "recommender_db_table" {
+  description = "MySQL table name to store recommender outputs."
+  type        = string
+  default     = "recommendations"
+}

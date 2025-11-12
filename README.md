@@ -92,7 +92,7 @@ What was added (no changes to existing infra):
 - S3 prefixes for `raw/`, `curated/`, `curated/recommendations/`, `athena-results/`
 - Lifecycle rule to expire `log/` after 30 days on the main bucket
 - Athena Workgroup + Database + external table `recommendations`
-- PySpark job uploaded to `s3://<main-bucket>/jobs/poi_recommender.py`
+- PySpark job uploaded to `s3://<main-bucket>/jobs/poi_recommender.py` that now writes to both S3 (Parquet) and MySQL via JDBC
 
 Run schedule:
 - 01:00 SGT (17:00 UTC): EventBridge calls AddJobFlowSteps to run the Spark job.
@@ -102,13 +102,14 @@ Run schedule:
 Manual triggers:
 - Start the EMR cluster (if terminated), then submit a one-off step via AWS Console (EMR → your cluster → Steps → Add step) with:
   - Jar: `command-runner.jar`
-  - Args: `spark-submit s3://<main-bucket>/jobs/poi_recommender.py --raw s3://<main-bucket>/raw/ --poi s3://<main-bucket>/raw/poi/ --output s3://<main-bucket>/curated/recommendations/ --topn 20`
+  - Args: `spark-submit s3://<main-bucket>/jobs/poi_recommender.py --raw s3://<main-bucket>/raw/ --poi s3://<main-bucket>/raw/poi/ --output s3://<main-bucket>/curated/recommendations/ --topn 20 --db-secret-arn <SecretsManagerARN> --db-table <mysql_table>`
 
 Outputs to use:
 - EMR cluster name: `terraform output recommender_emr_cluster_name`
 - Script path: `terraform output recommender_script_s3_path`
 - Recommendations prefix: `terraform output recommendations_s3_prefix`
 - Athena DB/Table: `terraform output recommender_athena_db`, `terraform output recommender_athena_table`
+- MySQL table + secret: `terraform output recommender_db_table`, `terraform output recommender_db_secret_arn`
 
 Cost & scaling notes:
 - Core nodes use Spot (50% of On-Demand bid). Adjust `recommender_core_instance_count` and instance types to tune cost.

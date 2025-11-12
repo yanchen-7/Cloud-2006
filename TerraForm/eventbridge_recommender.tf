@@ -11,7 +11,7 @@ resource "aws_scheduler_schedule" "recommender_daily" {
   flexible_time_window { mode  = "OFF" }
 
   target {
-    arn      = "arn:aws:scheduler:::aws-sdk:elasticmapreduce:addJobFlowSteps"
+    arn      = "arn:aws:scheduler:::aws-sdk:emr:addJobFlowSteps"
     role_arn = aws_iam_role.scheduler_emr_role.arn
     input    = jsonencode({
       JobFlowId = aws_emr_cluster.recommender.id,
@@ -27,7 +27,9 @@ resource "aws_scheduler_schedule" "recommender_daily" {
               "--raw",        "s3://${local.data_bucket_name}/${local.s3_prefix_raw}",
               "--poi",        "s3://${local.data_bucket_name}/${local.s3_prefix_raw}poi/",
               "--output",     "s3://${local.data_bucket_name}/${local.s3_prefix_recommendations}",
-              "--topn",       "20"
+              "--topn",       "20",
+              "--db-secret-arn", local.recommender_db_secret_arn,
+              "--db-table",   var.recommender_db_table
             ]
           }
         }

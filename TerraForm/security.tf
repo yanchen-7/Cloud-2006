@@ -99,6 +99,40 @@ resource "aws_security_group_rule" "db_ingress_from_lambda" {
   security_group_id        = aws_security_group.db_sg.id
 }
 
+# EMR → DB
+resource "aws_security_group_rule" "db_ingress_from_emr" {
+  type                     = "ingress"
+  from_port                = 3306
+  to_port                  = 3306
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.emr_recommender_sg.id
+  security_group_id        = aws_security_group.db_sg.id
+}
+
+# -----------------------------
+# Recommender EMR cluster
+# -----------------------------
+resource "aws_security_group" "emr_recommender_sg" {
+  name        = "${var.project_name}-emr-recommender-sg"
+  description = "Security group for the recommender EMR cluster"
+  vpc_id      = aws_vpc.main.id
+
+  # Allow intra-cluster traffic
+  ingress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    self        = true
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
 
 # -----------------------------
 # Production: Lambda

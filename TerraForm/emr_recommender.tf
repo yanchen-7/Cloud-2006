@@ -11,8 +11,8 @@ resource "aws_emr_cluster" "recommender" {
 
   ec2_attributes {
     subnet_id                         = aws_subnet.public_a.id
-    emr_managed_master_security_group = null
-    emr_managed_slave_security_group  = null
+    emr_managed_master_security_group = aws_security_group.emr_recommender_sg.id
+    emr_managed_slave_security_group  = aws_security_group.emr_recommender_sg.id
     instance_profile                  = aws_iam_instance_profile.emr_ec2_profile.arn
   }
 
@@ -54,7 +54,7 @@ resource "aws_emr_cluster" "recommender" {
     }
   ])
 
-  keep_job_flow_alive_when_no_steps = false
+  keep_job_flow_alive_when_no_steps = true
 
   auto_termination_policy {
     idle_timeout = 600

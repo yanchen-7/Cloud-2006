@@ -2,6 +2,8 @@ from pyspark.sql import SparkSession
 from pyspark.sql import functions as F
 from pyspark.sql.window import Window
 import argparse
+import json
+import boto3
 
 
 def parse_args():
@@ -10,7 +12,23 @@ def parse_args():
     p.add_argument("--poi", required=True, help="s3 path to raw poi metadata folder")
     p.add_argument("--output", required=True, help="s3 path to curated/recommendations/")
     p.add_argument("--topn", type=int, default=20)
+    p.add_argument("--db-secret-arn", required=True, help="Secrets Manager ARN with MySQL credentials")
+    p.add_argument("--db-table", default="recommendations", help="MySQL table for recommender output")
     return p.parse_args()
+
+
+def load_db_credentials(secret_arn: str) -> dict:
+    client = boto3.client("secretsmanager")
+    resp = client.get_secret_value(SecretId=secret_arn)
+    secret_str = resp.get("SecretString")
+    if not secret_str:
+        raise ValueError("SecretString missing from DB credentials secret")
+    data = json.loads(secret_str)
+    required_keys = ["username", "password", "host", "port", "dbname"]
+    missing = [k for k in required_keys if k not in data]
+    if missing:
+        raise ValueError(f"DB secret is missing keys: {', '.join(missing)}")
+    return data
 
 
 def main():
@@ -106,6 +124,20 @@ def main():
 
     # Write parquet (coalesce small files)
     recs.coalesce(1).write.mode("overwrite").parquet(args.output)
+
+    # Also persist to MySQL for serving
+    db_cfg = load_db_credentials(args.db_secret_arn)
+    jdbc_url = f"jdbc:mysql://{db_cfg['host']}:{db_cfg['port']}/{db_cfg['dbname']}"
+    (
+        recs.write.format("jdbc")
+        .option("url", jdbc_url)
+        .option("dbtable", args.db_table)
+        .option("user", db_cfg["username"])
+        .option("password", db_cfg["password"])
+        .option("driver", "com.mysql.cj.jdbc.Driver")
+        .mode("overwrite")
+        .save()
+    )
 
     spark.stop()
 
