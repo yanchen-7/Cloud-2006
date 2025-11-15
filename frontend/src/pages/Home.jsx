@@ -369,6 +369,20 @@ export default function Home() {
       }
       setReviewFeedback({ type: 'success', message: payload?.message || 'Review submitted. It may take a moment to appear.' })
       setReviewForm({ rating: 5, review_text: '' })
+      if (selectedPlace?.place_id) {
+        try {
+          const refreshResponse = await fetch(`/api/places/${encodeURIComponent(selectedPlace.place_id)}`)
+          if (refreshResponse.ok) {
+            const details = await refreshResponse.json()
+            setSelectedPlace(current => {
+              if (!current || current.place_id !== selectedPlace.place_id) return current
+              return { ...current, ...details }
+            })
+          }
+        } catch (refreshError) {
+          console.warn('Failed to refresh place after submitting review', refreshError)
+        }
+      }
     } catch (err) {
       setReviewFeedback({ type: 'error', message: err.message || 'Failed to submit review' })
     } finally {
@@ -697,12 +711,13 @@ export default function Home() {
                     <h4 id="placeReviewsTitle"><i className="fas fa-star-half-alt" aria-hidden="true"></i> Visitor Reviews</h4>
                     <span className="badge muted" id="placeReviewsSummary">{summaryLabel || '--'}</span>
                   </div>
-                  <div className="reviews-stack" id="placeReviewsList">
+                      <div className="reviews-stack" id="placeReviewsList">
                     {visibleReviews.length ? visibleReviews.map(review => (
                       <article key={`${selectedPlace.place_id}-${review.author_name}-${review.publish_time ?? review.time ?? Math.random()}`} className="review-card">
                         <div className="review-header">
                           <span className="review-rating"><i className="fas fa-star" aria-hidden="true"></i> {formatRating(review?.rating)}</span>
                           <span>{getReviewAuthor(review)}</span>
+                          {renderSentimentBadge(review)}
                         </div>
                         <span className="review-date">{formatDateLabel(review?.publish_time || review?.time)}</span>
                         <p className="review-text">{formatReviewSnippet(review?.review_text || review?.text)}</p>
@@ -841,6 +856,7 @@ export default function Home() {
                 <div className="review-header">
                   <span className="review-rating"><i className="fas fa-star" aria-hidden="true"></i> {formatRating(review?.rating)}</span>
                   <span>{getReviewAuthor(review)}</span>
+                  {renderSentimentBadge(review)}
                 </div>
                 <span className="review-date">{formatDateLabel(review?.publish_time || review?.time)} - {review.placeName}</span>
                 <p className="review-text">{formatReviewSnippet(review?.review_text || review?.text)}</p>
@@ -1009,6 +1025,25 @@ function buildReviewsSummary(summary) {
 
 function getReviewAuthor(review) {
   return review?.author_name || review?.author || review?.username || review?.name || 'Anonymous'
+}
+
+function getSentimentMeta(review) {
+  const rawLabel = review?.sentiment_label || review?.sentiment
+  const label = typeof rawLabel === 'string' ? rawLabel.toLowerCase() : null
+  if (label === 'positive') return { label: 'Positive', state: 'positive' }
+  if (label === 'negative') return { label: 'Negative', state: 'negative' }
+  if (label === 'neutral') return { label: 'Neutral', state: 'neutral' }
+  const score = Number(review?.sentiment_score)
+  if (!Number.isFinite(score)) return null
+  if (score >= 0.15) return { label: 'Positive', state: 'positive' }
+  if (score <= -0.15) return { label: 'Negative', state: 'negative' }
+  return { label: 'Neutral', state: 'neutral' }
+}
+
+function renderSentimentBadge(review) {
+  const meta = getSentimentMeta(review)
+  if (!meta) return null
+  return <span className={`badge sentiment ${meta.state}`} data-state={meta.state}>{meta.label}</span>
 }
 
 function truncateLabel(label, max = 18) {

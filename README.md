@@ -44,6 +44,22 @@ npm run dev
 
 Update `.env` with SMTP_HOST/PORT/USER/PASS (and optional SMTP_FROM, SMTP_SECURE) plus either PASSWORD_RESET_URL or APP_BASE_URL so password reset emails can be delivered with correct links.
 
+#### Sentiment Analysis Worker
+
+User reviews can be analyzed in batches to populate `sentiment_score` / `sentiment_label` fields:
+
+```
+cd backend
+npm run sentiment:run
+```
+
+Environment variables already used by the API (DB credentials, AWS secret config) are re-used. Optional knobs:
+
+- `SENTIMENT_BATCH_SIZE` (default `25`)
+- `SENTIMENT_ANALYSIS_VERSION` (default `1`; bump when you change models)
+
+Run the worker periodically (cron, GitHub Actions, etc.) so newly approved reviews are scored.
+
 ### Frontend (React + Vite)
 
 ```
@@ -124,4 +140,3 @@ Accepted input headers (no need to rename):
 
 Tagging:
 - All resources tagged with `Project`, `Environment`, `Owner` (from variables `project_name`, `recommender_environment`, `recommender_owner`).
-

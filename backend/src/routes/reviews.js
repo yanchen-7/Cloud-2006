@@ -18,13 +18,17 @@ router.get("/", async (req, res) => {
     const { place_id } = req.query;
     if (place_id) {
       const [reviews] = await pool.query(
-        // Adapt to the 'review' table schema
-        `SELECT place_id, place_name, address, rating, review_text, publish_time, author_name
-         FROM review WHERE place_id = ? ORDER BY publish_time DESC`,
+        // Adapt to the updated 'review' table schema
+        `SELECT place_id, place_name, address, rating, review_text, publish_time, author_name, sentiment_score, sentiment_label
+         FROM review
+         WHERE place_id = ? AND status = 'approved' AND deleted_at IS NULL
+         ORDER BY publish_time DESC`,
         [place_id]
       );
       const [summaryRows] = await pool.query(
-        `SELECT COUNT(*) AS total_reviews, AVG(rating) AS average_rating FROM review WHERE place_id = ? AND rating IS NOT NULL`,
+        `SELECT COUNT(*) AS total_reviews, AVG(rating) AS average_rating
+         FROM review
+         WHERE place_id = ? AND rating IS NOT NULL AND status = 'approved' AND deleted_at IS NULL`,
         [place_id]
       );
       return res.json({
@@ -71,7 +75,9 @@ router.post("/", requireAuth, async (req, res) => {
       rating: clampedRating,
       review_text: trimmedReview,
       author_name: user.username,
-      account_id: user.account_id,
+      account_id: user.account_id ?? null,
+      source: "user",
+      status: "approved",
       submitted_at: new Date().toISOString(),
     };
 
@@ -88,8 +94,20 @@ router.post("/", requireAuth, async (req, res) => {
     }
 
     await pool.query(
-      "INSERT INTO review (place_id, place_name, address, rating, review_text, publish_time, author_name) VALUES (?, ?, ?, ?, ?, NOW(), ?)",
-      [payload.place_id, payload.place_name, payload.address, payload.rating, payload.review_text, payload.author_name]
+      `INSERT INTO review
+         (place_id, place_name, address, rating, review_text, publish_time, author_name, account_id, source, status)
+       VALUES (?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?)`,
+      [
+        payload.place_id,
+        payload.place_name,
+        payload.address,
+        payload.rating,
+        payload.review_text,
+        payload.author_name,
+        payload.account_id,
+        payload.source,
+        payload.status,
+      ]
     );
     deleteCacheKeys(`places:${payload.place_id}`, PLACES_LIST_CACHE_KEY).catch((err) => {
       console.warn("Cache invalidation failed after direct DB insert:", err);

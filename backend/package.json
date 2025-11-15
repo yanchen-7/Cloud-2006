@@ -4,7 +4,8 @@
   "type": "module",
   "scripts": {
     "dev": "cross-env NODE_ENV=development nodemon src/index.js",
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "sentiment:run": "node src/jobs/sentimentWorker.js"
   },
   "dependencies": {
     "@aws-sdk/client-secrets-manager": "^3.910.0",
@@ -18,7 +19,8 @@
     "mysql2": "^3.11.3",
     "node-fetch": "^3.3.2",
     "nodemailer": "^6.9.14",
-    "redis": "^4.7.1"
+    "redis": "^4.7.1",
+    "sentiment": "^5.0.2"
   },
   "devDependencies": {
     "cross-env": "^7.0.3",

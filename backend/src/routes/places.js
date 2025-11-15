@@ -116,13 +116,17 @@ router.get("/:placeId", async (req, res) => {
     placeData.opening_hours = parseOpeningHours(placeData.opening_hours);
 
     const [reviews] = await pool.query(
-      // Adapt to the 'review' table schema
-      `SELECT place_id, place_name, address, rating, review_text, publish_time, author_name
-       FROM review WHERE place_id = ? ORDER BY publish_time DESC`,
+      // Adapt to the updated 'review' table schema
+      `SELECT place_id, place_name, address, rating, review_text, publish_time, author_name, sentiment_score, sentiment_label
+       FROM review
+       WHERE place_id = ? AND status = 'approved' AND deleted_at IS NULL
+       ORDER BY publish_time DESC`,
       [placeId]
     );
     const [summaryRows] = await pool.query(
-      `SELECT COUNT(*) AS total_reviews, AVG(rating) AS average_rating FROM review WHERE place_id = ? AND rating IS NOT NULL`,
+      `SELECT COUNT(*) AS total_reviews, AVG(rating) AS average_rating
+       FROM review
+       WHERE place_id = ? AND rating IS NOT NULL AND status = 'approved' AND deleted_at IS NULL`,
       [placeId]
     );
     const summary = {
