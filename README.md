@@ -92,11 +92,10 @@ npm run dev
 
 # Big Data Recommendation Engine
 
-This add-on introduces a low-cost, batch recommendation pipeline using Amazon EMR (Hadoop + Spark), S3, EventBridge Scheduler, and Athena.
+This add-on runs a low-cost, batch recommendation pipeline using Amazon EMR (Hadoop + Spark) and EventBridge Scheduler. It now reads clicks directly from RDS and writes recommendations back to MySQL.
 
 Data flow:
-- S3 `raw/` → EMR Spark job → S3 `curated/recommendations/` (Parquet)
-- Athena Workgroup + Table for ad-hoc queries
+- RDS `clicks` → EMR Spark job → RDS `recommendations`
 - EventBridge runs daily at 1 AM SGT (17:00 UTC) and submits the Spark step to EMR
 
 What was added (no changes to existing infra):
@@ -105,10 +104,9 @@ What was added (no changes to existing infra):
   - Public subnet for outbound access
   - Auto-termination after 10 minutes idle
 - IAM roles for EMR service/EC2, Scheduler role scoped to AddJobFlowSteps
-- S3 prefixes for `raw/`, `curated/`, `curated/recommendations/`, `athena-results/`
+- (S3 is optional; EMR logs only)
 - Lifecycle rule to expire `log/` after 30 days on the main bucket
-- Athena Workgroup + Database + external table `recommendations`
-- PySpark job uploaded to `s3://<main-bucket>/jobs/poi_recommender.py` that now writes to both S3 (Parquet) and MySQL via JDBC
+- PySpark job bundled with Terraform, fetched by the EMR step, and writes to MySQL via JDBC (Parquet output is optional)
 
 Run schedule:
 - 01:00 SGT (17:00 UTC): EventBridge calls AddJobFlowSteps to run the Spark job.
@@ -118,13 +116,11 @@ Run schedule:
 Manual triggers:
 - Start the EMR cluster (if terminated), then submit a one-off step via AWS Console (EMR → your cluster → Steps → Add step) with:
   - Jar: `command-runner.jar`
-  - Args: `spark-submit s3://<main-bucket>/jobs/poi_recommender.py --raw s3://<main-bucket>/raw/ --poi s3://<main-bucket>/raw/poi/ --output s3://<main-bucket>/curated/recommendations/ --topn 20 --db-secret-arn <SecretsManagerARN> --db-table <mysql_table>`
+  - Args: `spark-submit /home/hadoop/poi_recommender.py --db-secret-arn <SecretsManagerARN> --clicks-table clicks --db-table <mysql_table> --topn 20`
 
 Outputs to use:
 - EMR cluster name: `terraform output recommender_emr_cluster_name`
-- Script path: `terraform output recommender_script_s3_path`
-- Recommendations prefix: `terraform output recommendations_s3_prefix`
-- Athena DB/Table: `terraform output recommender_athena_db`, `terraform output recommender_athena_table`
+- Script path: bundled in Terraform and written on-cluster by the step
 - MySQL table + secret: `terraform output recommender_db_table`, `terraform output recommender_db_secret_arn`
 
 Cost & scaling notes:

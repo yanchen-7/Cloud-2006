@@ -16,8 +16,6 @@ resource "aws_emr_cluster" "recommender" {
     instance_profile                  = aws_iam_instance_profile.emr_ec2_profile.arn
   }
 
-  log_uri = "s3://${local.log_bucket_name}/emr/logs/"
-
   master_instance_fleet {
     name                        = "master-fleet"
     target_on_demand_capacity   = 1
@@ -61,12 +59,4 @@ resource "aws_emr_cluster" "recommender" {
   }
 
   tags = local.recommender_tags
-}
-
-# Upload PySpark job to S3 code path within main bucket
-resource "aws_s3_object" "recommender_job" {
-  bucket = aws_s3_bucket.main.id
-  key    = "${local.s3_prefix_jobs}poi_recommender.py"
-  source = "${path.module}/jobs/poi_recommender.py"
-  etag   = filemd5("${path.module}/jobs/poi_recommender.py")
 }

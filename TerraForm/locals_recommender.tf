@@ -13,7 +13,6 @@ locals {
   s3_prefix_raw            = "raw/"
   s3_prefix_curated        = "curated/"
   s3_prefix_recommendations= "curated/recommendations/"
-  s3_prefix_athena_results = "athena-results/"
   s3_prefix_jobs           = "jobs/"
 
   recommender_db_secret_arn = var.enable_prod_env ? aws_secretsmanager_secret.prod_db_credentials[0].arn : aws_secretsmanager_secret.dev_db_credentials.arn

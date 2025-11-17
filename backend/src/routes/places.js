@@ -1,7 +1,6 @@
 
 import express from "express";
 import { pool } from "../mysql.js";
-import { exec } from "child_process";
 import { getJson as getCachedJson, setJson as setCachedJson } from "../cache/redis.js";
 
 const router = express.Router();
@@ -84,6 +83,81 @@ router.get("/", async (_req, res) => {
   }
 });
 
+router.get("/recommendations", async (_req, res) => {
+  try {
+    const [rows] = await pool.query(
+      `SELECT
+         c.place_id,
+         COUNT(*) AS clicks,
+         b.place_name AS name,
+         b.address,
+         b.latitude,
+         b.longitude,
+         b.category,
+         b.international_phone_number,
+         b.website,
+         b.opening_hours,
+         b.rating,
+         b.price_level
+       FROM clicks c
+       INNER JOIN business_info b
+         ON c.place_id COLLATE utf8mb4_unicode_ci =
+            b.place_id COLLATE utf8mb4_unicode_ci
+       GROUP BY c.place_id, b.place_name, b.address, b.latitude, b.longitude,
+                b.category, b.international_phone_number, b.website,
+                b.opening_hours, b.rating, b.price_level
+       ORDER BY clicks DESC
+       LIMIT 5`
+    );
+
+    const results = rows.map((row, index) => ({
+      rank: index + 1,
+      score: Number(row.clicks),
+      place: {
+        place_id: row.place_id,
+        name: row.name,
+        formatted_address: row.address,
+        latitude: row.latitude,
+        longitude: row.longitude,
+        category: row.category,
+        international_phone_number: row.international_phone_number,
+        website: row.website,
+        opening_hours: parseOpeningHours(row.opening_hours),
+        rating: row.rating,
+        price_level: row.price_level,
+      },
+    }));
+
+    res.json(results);
+  } catch (e) {
+    console.error("/api/places/recommendations error:", e);
+    res.status(500).json({ error: "Failed to fetch recommendations" });
+  }
+});
+
+router.post("/clicks", async (req, res) => {
+  const { place_id: placeId, page, element, device_type: deviceType } = req.body || {};
+  if (!placeId) return res.status(400).json({ error: "place_id is required" });
+
+  // Derive IP from headers/proxy-aware Express setting
+  const ip = req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.ip || null;
+  // clicks.account_id is NOT NULL; use session user if present, else 0 (guest)
+  const accountId = req.session?.user?.account_id ?? 0;
+  const clickedAt = Math.floor(Date.now() / 1000);
+
+  try {
+    await pool.query(
+      `INSERT INTO clicks (place_id, account_id, page, element, device_type, ip_address, clicked_at)
+       VALUES (?, ?, ?, ?, ?, ?, FROM_UNIXTIME(?))`,
+      [placeId, accountId, page || null, element || null, deviceType || null, ip, clickedAt]
+    );
+    res.status(201).json({ ok: true });
+  } catch (e) {
+    console.error("/api/places/clicks error:", e);
+    res.status(500).json({ error: "Failed to log click" });
+  }
+});
+
 router.get("/:placeId", async (req, res) => {
   try {
     const placeId = req.params.placeId;
@@ -144,36 +218,6 @@ router.get("/:placeId", async (req, res) => {
     });
     res.status(500).json({ error: "Failed to fetch place" });
   }
-});
-
-router.get("/recommendations", async (_req, res) => {
-  // Dynamically build the python command using environment variables
-  // This is more secure and portable than hardcoding credentials.
-  const command = [
-    "python",
-    "../prediction.py",
-    `--mysql-host ${process.env.DB_HOST}`,
-    `--mysql-port ${process.env.DB_PORT}`,
-    `--mysql-user ${process.env.DB_USER}`,
-    `--mysql-password ${process.env.DB_PASSWORD}`,
-    `--mysql-db ${process.env.DB_NAME}`,
-    "--mysql-table clicks --mode top --topk 5 --min-reviews 10 --pretty",
-  ].join(" ");
-  exec(
-    command,
-    (error, stdout, stderr) => {
-      if (error) {
-        console.error("Prediction error:", error, stderr);
-        return res.status(500).json({ error: "Failed to generate recommendations" });
-      }
-      try {
-        const result = JSON.parse(stdout);
-        res.json(result);
-      } catch (e) {
-        res.status(500).json({ error: "Failed to parse recommendations" });
-      }
-    }
-  );
 });
 
 export default router;

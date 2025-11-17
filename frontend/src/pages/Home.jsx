@@ -20,6 +20,7 @@ export default function Home() {
   const [savedPlaces, setSavedPlaces] = useState(() => new Set())
   const [currentSlide, setCurrentSlide] = useState(0)
   const [isLoadingPlaces, setIsLoadingPlaces] = useState(false)
+  const [isLoadingRecommendations, setIsLoadingRecommendations] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
   const [reviewsExpanded, setReviewsExpanded] = useState(false)
   const [userLocation, setUserLocation] = useState(null)
@@ -29,6 +30,7 @@ export default function Home() {
   const [reviewForm, setReviewForm] = useState({ rating: 5, review_text: '' })
   const [isSubmittingReview, setIsSubmittingReview] = useState(false)
   const [reviewFeedback, setReviewFeedback] = useState({ type: null, message: '' })
+  const [recommendations, setRecommendations] = useState([])
 
   // Initialize Leaflet icons
   useEffect(() => {
@@ -121,6 +123,22 @@ export default function Home() {
     }
   }, [session])
 
+  const loadRecommendations = useCallback(async () => {
+    setIsLoadingRecommendations(true)
+    try {
+      const response = await fetch('/api/places/recommendations')
+      if (!response.ok) throw new Error('Failed to fetch recommendations')
+      const data = await response.json()
+      const list = Array.isArray(data) ? data.filter(entry => entry?.place) : []
+      setRecommendations(list)
+    } catch (error) {
+      console.error('Unable to load recommendations', error)
+      setRecommendations([])
+    } finally {
+      setIsLoadingRecommendations(false)
+    }
+  }, [])
+
 
   useEffect(() => {
     loadPlaces()
@@ -129,6 +147,10 @@ export default function Home() {
   useEffect(() => {
     loadSavedPlaces()
   }, [loadSavedPlaces])
+
+  useEffect(() => {
+    loadRecommendations()
+  }, [loadRecommendations])
 
   // Callback ref to initialize the map safely
   const mapContainerRef = useCallback(node => {
@@ -155,6 +177,22 @@ export default function Home() {
     if (!place) {
       setSelectedPlace(null)
       return
+    }
+    // Log click for recommender
+    if (place.place_id) {
+      fetch('/api/places/clicks', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          place_id: place.place_id,
+          page: 'home',
+          element: 'map_marker',
+          device_type: /Mobi|Android/i.test(navigator.userAgent) ? 'mobile' : 'desktop',
+        }),
+      }).catch(err => {
+        console.warn('Failed to log click', err)
+      })
     }
     const placeId = place.place_id
     setReviewsExpanded(false)
@@ -233,27 +271,6 @@ export default function Home() {
       if (place?.category) set.add(String(place.category))
     })
     return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
-  }, [places])
-
-  const recommendations = useMemo(() => {
-    const list = Array.isArray(places) ? places : []
-    const byCategory = new Map()
-    list.forEach(place => {
-      if (!place) return
-      const category = place.category || 'Highlights'
-      const bucket = byCategory.get(category) || []
-      bucket.push(place)
-      byCategory.set(category, bucket)
-    })
-    const entries = []
-    byCategory.forEach((bucket, category) => {
-      const sorted = bucket
-        .slice()
-        .sort((a, b) => Number(b?.rating || 0) - Number(a?.rating || 0))
-      if (sorted[0]) entries.push({ category, place: sorted[0] })
-    })
-    entries.sort((a, b) => Number(b.place?.rating || 0) - Number(a.place?.rating || 0))
-    return entries.slice(0, 5)
   }, [places])
 
   const goToPreviousRecommendation = useCallback(() => {
@@ -587,21 +604,29 @@ export default function Home() {
           <div className="slider" id="recommendationSlider">
             <div className="slider-track" id="recommendationTrack" style={sliderStyle}>
               {recommendations.length ? recommendations.map((entry, index) => (
-                <div className="slider-item" key={`${entry.category}-${entry.place.place_id}-${index}`}>
+                <div className="slider-item" key={`${entry.place?.place_id || 'rec'}-${index}`}>
                   <div className="details">
                     <h3>{entry.place?.name || '--'}</h3>
                     <p>{entry.place?.formatted_address || entry.place?.address || '--'}</p>
                     <div className="meta">
                       <span className="badge rating"><i className="fas fa-star" aria-hidden="true"></i> {formatRating(entry.place?.rating)}</span>
-                      <span className="badge muted">{getReviewCountLabel(entry.place) || 'Popular spot'}</span>
+                      <span className="badge muted">{entry.place?.category || 'Trending now'}</span>
+                      {entry.rank ? (
+                        <span className="badge muted">Hottest #{entry.rank}</span>
+                      ) : null}
+                      {entry.score != null ? (
+                        <span className="badge muted">Score {Number(entry.score).toFixed(3)}</span>
+                      ) : null}
                     </div>
                   </div>
                   <div className="map-preview">
-                    <div className="category">{entry.category}</div>
+                    <div className="category">{entry.place?.category || 'Hot pick'}</div>
                   </div>
                 </div>
               )) : (
-                <div className="slider-placeholder">Recommendations will appear once places load.</div>
+                <div className="slider-placeholder">
+                  {isLoadingRecommendations ? 'Loading recommendations…' : 'Recommendations will appear once places load.'}
+                </div>
               )}
             </div>
             <div className="slider-pagination" id="recommendationDots">

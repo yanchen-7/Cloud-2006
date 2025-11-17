@@ -88,8 +88,7 @@ data "aws_iam_policy_document" "emr_ec2_s3" {
       "${aws_s3_bucket.main.arn}/${local.s3_prefix_raw}*",
       "${aws_s3_bucket.main.arn}/${local.s3_prefix_curated}*",
       "${aws_s3_bucket.main.arn}/${local.s3_prefix_recommendations}*",
-      "${aws_s3_bucket.main.arn}/${local.s3_prefix_jobs}*",
-      "${aws_s3_bucket.main.arn}/${local.s3_prefix_athena_results}*"
+      "${aws_s3_bucket.main.arn}/${local.s3_prefix_jobs}*"
     ]
   }
   statement {
@@ -155,10 +154,21 @@ data "aws_iam_policy_document" "scheduler_emr_policy" {
     effect = "Allow"
     actions = [
       "elasticmapreduce:AddJobFlowSteps",
+      "elasticmapreduce:RunJobFlow",
       "elasticmapreduce:DescribeCluster",
       "elasticmapreduce:ListSteps"
     ]
-    resources = [aws_emr_cluster.recommender.arn]
+    resources = ["*"]
+  }
+
+  # Allow Scheduler to launch ephemeral clusters by passing EMR roles
+  statement {
+    effect = "Allow"
+    actions = ["iam:PassRole"]
+    resources = [
+      aws_iam_role.emr_service_role.arn,
+      aws_iam_role.emr_ec2_role.arn
+    ]
   }
 }
 

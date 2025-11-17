@@ -29,10 +29,3 @@ resource "aws_s3_object" "prefix_recs" {
   key    = local.s3_prefix_recommendations
   content= ""
 }
-
-resource "aws_s3_object" "prefix_athena_results" {
-  bucket = aws_s3_bucket.main.id
-  key    = local.s3_prefix_athena_results
-  content= ""
-}
-
