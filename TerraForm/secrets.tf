@@ -17,6 +17,10 @@ resource "aws_secretsmanager_secret" "prod_db_credentials" {
   tags = {
     Name = "${var.project_name}-prod-db-credentials"
   }
+
+   lifecycle {
+     prevent_destroy = true
+   }
 }
 
 resource "aws_secretsmanager_secret_version" "prod_db_credentials_version" {
@@ -38,6 +42,10 @@ resource "aws_secretsmanager_secret" "dev_db_credentials" {
 
   tags = {
     Name = "${var.project_name}-dev-db-credentials"
+  }
+
+  lifecycle {
+    prevent_destroy = true
   }
 }
 

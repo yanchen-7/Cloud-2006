@@ -326,6 +326,10 @@ resource "aws_lb" "main" {
   load_balancer_type = "application"
   security_groups    = [aws_security_group.alb_sg.id]
   subnets            = [aws_subnet.public_a.id, aws_subnet.public_b.id]
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }
 
 resource "aws_lb_target_group" "main" {
@@ -340,6 +344,10 @@ resource "aws_lb_target_group" "main" {
     path                = "/api/health"
     protocol            = "HTTP"
     matcher             = "200-399"
+  }
+
+  lifecycle {
+    prevent_destroy = true
   }
 }
 

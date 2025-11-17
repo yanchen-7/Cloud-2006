@@ -49,4 +49,8 @@ resource "aws_wafv2_web_acl" "main" {
   tags = {
     Name = "${var.project_name}-web-acl"
   }
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }

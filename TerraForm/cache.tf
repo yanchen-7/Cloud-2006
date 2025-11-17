@@ -30,4 +30,8 @@ resource "aws_elasticache_cluster" "prod_cache" {
   tags = {
     Name = "${var.project_name}-prod-cache"
   }
+
+  lifecycle {
+    prevent_destroy = true
+  }
 }

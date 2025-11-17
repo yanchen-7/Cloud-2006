@@ -11,14 +11,14 @@ resource "aws_db_subnet_group" "db_subnet_group" {
 }
 
 # Development DB Subnet Group
-resource "aws_db_subnet_group" "dev_db_subnet_group" {
-  name       = "${var.project_name}-dev-db-subnet-group"
-  subnet_ids = [aws_subnet.dev_private_a.id, aws_subnet.dev_private_b.id] # From dev_vpc.tf
-
-  tags = {
-    Name = "${var.project_name}-dev-db-subnet-group"
-  }
-}
+# resource "aws_db_subnet_group" "dev_db_subnet_group" {
+#  name       = "${var.project_name}-dev-db-subnet-group"
+#  subnet_ids = [aws_subnet.dev_private_a.id, aws_subnet.dev_private_b.id] # From dev_vpc.tf
+#
+#  tags = {
+#    Name = "${var.project_name}-dev-db-subnet-group"
+#  }
+#}
 
 # --- IAM Role for RDS Enhanced Monitoring ---
 resource "aws_iam_role" "rds_enhanced_monitoring_role" {
@@ -55,7 +55,7 @@ resource "aws_db_instance" "dev_db" {
   storage_type           = "gp2"
   username               = var.db_username
   password               = var.db_password
-  db_subnet_group_name   = aws_db_subnet_group.dev_db_subnet_group.name
+  db_subnet_group_name   = aws_db_subnet_group.db_subnet_group.name
   vpc_security_group_ids = [aws_security_group.dev_db_sg.id] # From dev_vpc.tf
   skip_final_snapshot    = false # It's safer to create a final snapshot on destroy
   final_snapshot_identifier = "${var.project_name}-dev-db-final-snapshot"
@@ -69,6 +69,10 @@ resource "aws_db_instance" "dev_db" {
   monitoring_role_arn    = aws_iam_role.rds_enhanced_monitoring_role.arn
   tags = {
     Name = "${var.project_name}-dev-db"
+  }
+
+  lifecycle {
+    prevent_destroy = true
   }
 }
 
@@ -121,5 +125,9 @@ resource "aws_db_instance" "prod_db" {
 
   tags = {
     Name = "${var.project_name}-prod-db"
+  }
+
+  lifecycle {
+    prevent_destroy = true
   }
 }
