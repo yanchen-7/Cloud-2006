@@ -8,11 +8,10 @@ import boto3
 
 def parse_args():
     p = argparse.ArgumentParser()
-    p.add_argument("--raw", required=True, help="s3 path to raw/ (contains interactions/ and poi/)")
-    p.add_argument("--poi", required=True, help="s3 path to raw poi metadata folder")
-    p.add_argument("--output", required=True, help="s3 path to curated/recommendations/")
-    p.add_argument("--topn", type=int, default=20)
     p.add_argument("--db-secret-arn", required=True, help="Secrets Manager ARN with MySQL credentials")
+    p.add_argument("--clicks-table", default="clicks", help="MySQL table holding click interactions")
+    p.add_argument("--output", help="optional path (e.g., s3://...) to write Parquet recommendations for auditing")
+    p.add_argument("--topn", type=int, default=20)
     p.add_argument("--db-table", default="recommendations", help="MySQL table for recommender output")
     return p.parse_args()
 
@@ -38,27 +37,19 @@ def main():
         .getOrCreate()
     )
 
-    # Load interactions (schema: user_id, item_id, timestamp, event_type)
-    interactions_path = f"{args.raw.rstrip('/')}/interactions/"
-    poi_path = args.poi.rstrip('/') + "/"
+    db_cfg = load_db_credentials(args.db_secret_arn)
+    jdbc_url = f"jdbc:mysql://{db_cfg['host']}:{db_cfg['port']}/{db_cfg['dbname']}"
 
-    # Robust loader: try JSON, but fall back to CSV if only _corrupt_record exists
-    def load_interactions(path: str):
-        df_json = None
-        try:
-            tmp = spark.read.json(path)
-            # If JSON reader produced only _corrupt_record or empty schema, treat as failure
-            non_trivial_cols = [c for c in tmp.columns if c != "_corrupt_record"]
-            if len(non_trivial_cols) > 0:
-                df_json = tmp
-        except Exception:
-            df_json = None
-        if df_json is not None:
-            return df_json
-        # Fallback to CSV with header
-        return spark.read.option("header", True).csv(path)
-
-    interactions = load_interactions(interactions_path)
+    # Load interactions directly from RDS (clicks table)
+    interactions = (
+        spark.read.format("jdbc")
+        .option("url", jdbc_url)
+        .option("dbtable", args.clicks_table)
+        .option("user", db_cfg["username"])
+        .option("password", db_cfg["password"])
+        .option("driver", "com.mysql.cj.jdbc.Driver")
+        .load()
+    )
 
     # Normalize column casing to avoid case-sensitivity surprises
     interactions = interactions.toDF(*[c.lower() for c in interactions.columns])
@@ -72,10 +63,9 @@ def main():
         return F.coalesce(*exprs)
 
     # Coalesce common variants from different exports
-    # user: user_id | USER_ID | account_id | ACCOUNT_ID
-    # item: item_id | ITEM_ID | place_id   | PLACE_ID
-    # ts  : timestamp | TIMESTAMP | clicked_at | CLICKED_AT
-    # event_type: event_type | EVENT_TYPE | default 'CLICK'
+    # user: user_id | account_id
+    # item: item_id | place_id
+    # ts  : timestamp | clicked_at
     interactions = interactions.withColumn(
         "user",
         pick_coalesce(interactions, ["user_id", "account_id"]).cast("string")
@@ -84,7 +74,9 @@ def main():
         pick_coalesce(interactions, ["item_id", "place_id"]).cast("string")
     ).withColumn(
         "ts",
-        pick_coalesce(interactions, ["timestamp", "clicked_at"]).cast("long")
+        F.unix_timestamp(
+            pick_coalesce(interactions, ["timestamp", "clicked_at"]).cast("timestamp")
+        ).cast("long")
     ).withColumn(
         "event_type",
         pick_coalesce(interactions, ["event_type"], default=F.lit("CLICK"))
@@ -103,7 +95,7 @@ def main():
     # Count co-occurrences (i1, i2)
     co_counts = pairs.groupBy("i1", "i2").count().withColumnRenamed("count", "co_visits")
 
-    # Convert to similarity score (here: co_visits normalized by sqrt(freq(i1)*freq(i2)))
+    # Convert to similarity score (co_visits normalized by sqrt(freq(i1)*freq(i2)))
     item_freq = user_items.groupBy("item").count().withColumnRenamed("count", "freq")
     co = co_counts.join(item_freq.withColumnRenamed("item", "i1"), "i1")\
                    .withColumnRenamed("freq", "f1")\
@@ -122,12 +114,11 @@ def main():
         F.col("score").cast("double")
     )
 
-    # Write parquet (coalesce small files)
-    recs.coalesce(1).write.mode("overwrite").parquet(args.output)
+    # Optional Parquet output (e.g., audit trail)
+    if args.output:
+        recs.coalesce(1).write.mode("overwrite").parquet(args.output)
 
-    # Also persist to MySQL for serving
-    db_cfg = load_db_credentials(args.db_secret_arn)
-    jdbc_url = f"jdbc:mysql://{db_cfg['host']}:{db_cfg['port']}/{db_cfg['dbname']}"
+    # Persist to MySQL for serving
     (
         recs.write.format("jdbc")
         .option("url", jdbc_url)
