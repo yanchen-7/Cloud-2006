@@ -3,6 +3,11 @@ output "dev_instance_public_ip" {
   value       = aws_eip.dev_eip.public_ip
 }
 
+output "prod_staging_instance_public_ip" {
+  description = "Public IP address of the standalone production staging EC2 instance."
+  value       = var.enable_prod_env ? aws_instance.web_server_prod_staging[0].public_ip : "Staging instance not enabled."
+}
+
 output "prod_load_balancer_dns" {
   description = "DNS name of the production Application Load Balancer."
   value       = var.enable_prod_env ? aws_lb.main[0].dns_name : "Production environment (ALB/ASG) is not enabled."

@@ -186,6 +186,54 @@ resource "aws_instance" "web_server_dev" {
   }
 }
 
+# --- 7b. Production Staging Instance ---
+
+resource "aws_instance" "web_server_prod_staging" {
+  count = var.enable_prod_env ? 1 : 0
+
+  # Use the specific AMI ID you provided.
+  ami                    = "ami-090cb75ce61d00743"
+  instance_type          = var.instance_type
+  key_name               = aws_key_pair.key_pair.key_name
+  # Place it in a public subnet of the PROD VPC.
+  subnet_id              = aws_subnet.public_a.id
+  vpc_security_group_ids = [aws_security_group.prod_staging_sg[0].id]
+  iam_instance_profile   = aws_iam_instance_profile.ec2_profile.name
+  # We need a public IP to SSH into it.
+  associate_public_ip_address = true
+
+  # This user_data script is copied from the production launch template.
+  # It configures the instance to connect to the PRODUCTION database and other prod services.
+  user_data = base64encode(<<-EOF
+              #!/bin/bash
+              # Update all packages
+              yum update -y
+
+              # Install Git, Node.js, PM2, X-Ray (these should already be on the AMI, but good for consistency)
+              yum install -y git httpd
+              curl -sL https://rpm.nodesource.com/setup_18.x | bash -
+              yum install -y nodejs
+              npm install pm2 -g
+              yum install -y aws-xray-daemon
+              systemctl enable xray
+              systemctl start xray
+
+              # Persist application environment so PM2/SSH sessions pick up PRODUCTION cloud DB credentials.
+              cat <<'ENVVARS' | sudo tee /etc/profile.d/cloud2006.sh > /dev/null
+              export NODE_ENV=production
+              export AWS_REGION="${var.aws_region}"
+              export DB_SECRET_NAME="${aws_secretsmanager_secret.prod_db_credentials[0].name}"
+              # Other environment variables for production...
+              ENVVARS
+              sudo chmod 0644 /etc/profile.d/cloud2006.sh
+              EOF
+            )
+
+  tags = {
+    Name = "${var.project_name}-web-server-prod-staging"
+  }
+}
+
 # --- 7a. Elastic IP for Dev Instance ---
 resource "aws_eip" "dev_eip" {
   # This requests an Elastic IP from AWS within your VPC.

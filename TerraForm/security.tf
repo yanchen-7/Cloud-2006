@@ -87,6 +87,18 @@ resource "aws_security_group_rule" "db_ingress_from_web" {
   security_group_id        = aws_security_group.db_sg.id
 }
 
+# Web (Staging Instance) -> DB
+resource "aws_security_group_rule" "db_ingress_from_staging" {
+  count = var.enable_prod_env ? 1 : 0
+
+  type                     = "ingress"
+  from_port                = 3306
+  to_port                  = 3306
+  protocol                 = "tcp"
+  source_security_group_id = aws_security_group.prod_staging_sg[0].id
+  security_group_id        = aws_security_group.db_sg.id
+}
+
 # Lambda → DB
 resource "aws_security_group_rule" "db_ingress_from_lambda" {
   count = var.enable_prod_env ? 1 : 0
@@ -226,5 +238,43 @@ resource "aws_security_group" "apigw_link_sg" {
     to_port     = 0
     protocol    = "-1"
     cidr_blocks = [aws_vpc.main.cidr_block]
+  }
+}
+
+# -----------------------------
+# Production: Staging EC2 Instance
+# -----------------------------
+resource "aws_security_group" "prod_staging_sg" {
+  count = var.enable_prod_env ? 1 : 0
+
+  name        = "${var.project_name}-prod-staging-sg"
+  description = "Allow SSH and HTTP for the standalone production staging instance"
+  vpc_id      = aws_vpc.main.id
+
+  # Ingress for SSH. WARNING: 0.0.0.0/0 is open to the world.
+  # For better security, replace this with your own IP address: ["YOUR_IP/32"]
+  ingress {
+    from_port   = 22
+    to_port     = 22
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Allow SSH access"
+  }
+
+  # Ingress for HTTP, useful for health checks or direct testing.
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+    description = "Allow HTTP access"
+  }
+
+  # Allow all outbound traffic
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
   }
 }
