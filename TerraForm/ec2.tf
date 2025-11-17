@@ -128,7 +128,7 @@ resource "aws_iam_instance_profile" "ec2_profile" {
 # --- 7. Dev EC2 Instance ---
 resource "aws_instance" "web_server_dev" {
   ami                    = var.dev_ami_id != "" ? var.dev_ami_id : data.aws_ami.amazon_linux_2023.id
-  instance_type          = var.instance_type
+  instance_type          = "t3.micro"
   key_name               = aws_key_pair.key_pair.key_name
   subnet_id              = aws_subnet.dev_public_a.id # From dev_vpc.tf
   vpc_security_group_ids = [aws_security_group.dev_web_sg.id] # From dev_vpc.tf

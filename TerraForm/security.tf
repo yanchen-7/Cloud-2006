@@ -113,6 +113,9 @@ resource "aws_security_group_rule" "db_ingress_from_lambda" {
 
 # EMR → DB
 resource "aws_security_group_rule" "db_ingress_from_emr" {
+  # Removed due to duplicate existing rule; uncomment if you need Terraform to manage it explicitly.
+  count = 0
+
   type                     = "ingress"
   from_port                = 3306
   to_port                  = 3306

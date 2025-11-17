@@ -56,7 +56,7 @@ resource "aws_db_instance" "dev_db" {
   username               = var.db_username
   password               = var.db_password
   db_subnet_group_name   = aws_db_subnet_group.db_subnet_group.name
-  vpc_security_group_ids = [aws_security_group.dev_db_sg.id] # From dev_vpc.tf
+  vpc_security_group_ids = [aws_security_group.db_sg.id] # Use SG in the same VPC as the subnet group
   skip_final_snapshot    = false # It's safer to create a final snapshot on destroy
   final_snapshot_identifier = "${var.project_name}-dev-db-final-snapshot"
   publicly_accessible    = false # Important for security
@@ -116,8 +116,9 @@ resource "aws_db_instance" "prod_db" {
   final_snapshot_identifier = "${var.project_name}-prod-db-final-snapshot"
   apply_immediately   = true # Apply changes immediately, including password updates.
 
-  # Set/update the master password. This will be applied after the instance is created from the snapshot.
-  password = random_password.prod_db_password[0].result
+  # Set/update master credentials when not restoring from snapshot
+  username = var.refresh_prod_db ? null : var.db_username
+  password = var.refresh_prod_db ? null : random_password.prod_db_password[0].result
 
   # Enable Enhanced Monitoring at a 60-second interval
   monitoring_interval    = 60
