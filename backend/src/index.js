@@ -36,7 +36,7 @@ const dbConfig = {
   namedPlaceholders: true,
   connectTimeout: 10000,
   ssl: process.env.DB_SSL_MODE || "Amazon RDS",
-  secretName: process.env.DB_SECRET_NAME,
+  //secretName: process.env.DB_SECRET_NAME,
   awsRegion: process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION,
 };
 
