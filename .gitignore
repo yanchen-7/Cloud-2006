@@ -51,6 +51,7 @@ dist/
 
 # --- Data outputs ---
 attractions*.csv
+review_for_ML*.csv
 *.parquet
 *.xlsx
 *.db
@@ -83,5 +84,4 @@ sample
 
 # Terraform plan files
 tfplan
-
 
