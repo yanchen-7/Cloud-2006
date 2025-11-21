@@ -67,94 +67,60 @@ function withQueryTimeout(sql, timeoutMs) {
 }
 
 /**
- * Fetch reviews with multi-schema fallback.
- * Supports:
- *  1) modern schema: rating, status, deleted_at, sentiment_score, sentiment_label
- *  2) current schema (your DB): ratings (plural), deleted_at, sentiment_label
- *  3) legacy schema: ratings only
+ * Fetch reviews matching the specific Cloud-2006 database structure.
+ * CORRECTED: rating (singular), sentiment_label, deleted_at, NO status column.
  */
 async function fetchPlaceReviews(placeId, limit) {
-  // 1) Modern schema
-  const modernReviewsSql = `SELECT place_id, place_name, address, rating, review_text, publish_time, author_name, sentiment_score, sentiment_label
-         FROM review
-         WHERE place_id = ? AND status = 'approved' AND deleted_at IS NULL
-         ORDER BY publish_time DESC
-         LIMIT ${limit}`;
-  const modernSummarySql = `SELECT COUNT(*) AS total_reviews, AVG(rating) AS average_rating
-         FROM review
-         WHERE place_id = ? AND rating IS NOT NULL AND status = 'approved' AND deleted_at IS NULL`;
+  const reviewsSql = `
+    SELECT 
+      place_id, 
+      place_name, 
+      address, 
+      rating, 
+      review_text, 
+      publish_time, 
+      author_name, 
+      sentiment_label
+    FROM review
+    WHERE place_id = ? 
+      AND (deleted_at IS NULL OR deleted_at = '')
+    ORDER BY publish_time DESC
+    LIMIT ${limit}`;
+
+  const summarySql = `
+    SELECT 
+      COUNT(*) AS total_reviews, 
+      AVG(rating) AS average_rating
+    FROM review
+    WHERE place_id = ? 
+      AND rating IS NOT NULL 
+      AND (deleted_at IS NULL OR deleted_at = '')`;
 
   try {
     const [reviewsRows] = await pool.query(
-      withQueryTimeout(modernReviewsSql, detailQueryTimeoutMs),
+      withQueryTimeout(reviewsSql, detailQueryTimeoutMs),
       [placeId]
     );
     const [summaryRows] = await pool.query(
-      withQueryTimeout(modernSummarySql, detailQueryTimeoutMs),
+      withQueryTimeout(summarySql, detailQueryTimeoutMs),
       [placeId]
     );
     return { reviewsRows, summaryStats: summaryRows?.[0] ?? {} };
   } catch (err) {
-    if (err?.code !== MYSQL_BAD_FIELD_ERROR) throw err;
+    console.error("Failed to fetch reviews:", err);
+    // Return empty result instead of crashing
+    return { reviewsRows: [], summaryStats: {} };
   }
-
-  // 2) Current schema (ratings plural)
-  const currentReviewsSql = `SELECT place_id, place_name, address, ratings AS rating, review_text, publish_time, author_name, sentiment_label
-         FROM review
-         WHERE place_id = ? AND deleted_at IS NULL
-         ORDER BY publish_time DESC
-         LIMIT ${limit}`;
-  const currentSummarySql = `SELECT COUNT(*) AS total_reviews, AVG(ratings) AS average_rating
-         FROM review
-         WHERE place_id = ? AND ratings IS NOT NULL AND deleted_at IS NULL`;
-
-  try {
-    const [reviewsRows] = await pool.query(
-      withQueryTimeout(currentReviewsSql, detailQueryTimeoutMs),
-      [placeId]
-    );
-    const [summaryRows] = await pool.query(
-      withQueryTimeout(currentSummarySql, detailQueryTimeoutMs),
-      [placeId]
-    );
-    return { reviewsRows, summaryStats: summaryRows?.[0] ?? {} };
-  } catch (err) {
-    if (err?.code !== MYSQL_BAD_FIELD_ERROR) throw err;
-  }
-
-  // 3) Legacy schema (ratings plural, no deleted_at)
-  const legacyReviewsSql = `SELECT place_id, place_name, address, ratings AS rating, review_text, publish_time, author_name
-         FROM review
-         WHERE place_id = ?
-         ORDER BY publish_time DESC
-         LIMIT ${limit}`;
-  const legacySummarySql = `SELECT COUNT(*) AS total_reviews, AVG(ratings) AS average_rating
-         FROM review
-         WHERE place_id = ? AND ratings IS NOT NULL`;
-
-  const [reviewsRows] = await pool.query(
-    withQueryTimeout(legacyReviewsSql, detailQueryTimeoutMs),
-    [placeId]
-  );
-  const [summaryRows] = await pool.query(
-    withQueryTimeout(legacySummarySql, detailQueryTimeoutMs),
-    [placeId]
-  );
-  return { reviewsRows, summaryStats: summaryRows?.[0] ?? {} };
 }
 
 /**
  * Safely parses the opening_hours JSON string from the database.
- * The data is stored as a Python dict repr, so it needs cleaning.
- * @param {string | null | undefined} hoursString
- * @returns {object | null}
  */
 function parseOpeningHours(hoursString) {
   if (!hoursString || typeof hoursString !== "string") {
     return null;
   }
   try {
-    // Convert Python-style dict string to valid JSON
     const jsonString = hoursString
       .replace(/'/g, '"')
       .replace(/\bTrue\b/g, "true")
@@ -162,7 +128,7 @@ function parseOpeningHours(hoursString) {
       .replace(/\bNone\b/g, "null");
     return JSON.parse(jsonString);
   } catch (e) {
-    return null; // Return null if parsing fails
+    return null;
   }
 }
 
@@ -175,7 +141,6 @@ router.get("/", async (_req, res) => {
 
     const [rows] = await pool.query(
       withQueryTimeout(
-        // Align with existing schema in database.txt; alias to keep frontend fields consistent
         `SELECT
          place_id,
          place_name AS name,
@@ -194,7 +159,6 @@ router.get("/", async (_req, res) => {
       )
     );
 
-    // Parse opening_hours for each place
     const places = rows.map((place) => ({
       ...place,
       opening_hours: parseOpeningHours(place.opening_hours),
@@ -205,7 +169,6 @@ router.get("/", async (_req, res) => {
     }
     res.json(places);
   } catch (e) {
-    // Enhanced error logging to capture more details
     console.error("/api/places error:", {
       message: e.message,
       code: e.code,
@@ -274,7 +237,6 @@ router.get("/recommendations", async (_req, res) => {
 function pushClickRecord({ req, placeId, page, element, deviceType }) {
   const ip =
     req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.ip || null;
-  // clicks.account_id is NOT NULL; use session user if present, else 0 (guest)
   const accountId = req.session?.user?.account_id ?? 0;
   const clickedAt = Math.floor(Date.now() / 1000);
   return pool.query(
@@ -303,7 +265,6 @@ async function logClick(req, res) {
 }
 
 router.post("/clicks", logClick);
-// Fallback for environments that block POST; allows click logging via GET query params.
 router.get("/clicks/log", logClick);
 
 router.get("/:placeId/clicks", async (req, res) => {
@@ -367,10 +328,16 @@ router.get("/:placeId", async (req, res) => {
   try {
     const placeId = req.params.placeId;
     const cacheKey = `places:${placeId}`;
+    
+    // --- TEMPORARILY DISABLED CACHE TO FORCE REFRESH ---
+    // We commented this out so the server asks the database directly
+    /*
     const cachedPlace = await getCachedJson(cacheKey);
     if (cachedPlace) {
       return res.json(cachedPlace);
     }
+    */
+    // ----------------------------------------------------
 
     const [rows] = await pool.query(
       withQueryTimeout(
