@@ -258,6 +258,57 @@ export default function Explore() {
             <span><i className="fas fa-map-marker-alt" aria-hidden="true"></i> Places</span>
             <span><i className="fas fa-star text-saved" aria-hidden="true"></i> Saved</span>
           </div>
+          <aside className={`explore-details${selectedPlace ? ' is-active' : ''}`} id="exploreDetailsPanel" aria-live="polite">
+            <button
+              id="exploreDetailsClose"
+              className="icon-btn light"
+              type="button"
+              aria-label="Close details"
+              onClick={() => setSelectedPlace(null)}
+            >
+              <i className="fas fa-times" aria-hidden="true"></i>
+            </button>
+            {selectedPlace ? (
+              <div className="explore-detail-body">
+                <header className="place-header">
+                  <div className="place-header-text">
+                    <h3>{selectedPlace.name || '--'}</h3>
+                    <div className="place-meta">
+                      <span className="badge muted">{selectedPlace.category || '--'}</span>
+                      <span className="badge rating"><i className="fas fa-star" aria-hidden="true"></i> {formatRating(selectedPlace.rating)}</span>
+                      <span className="badge muted">{selectedSummary || '--'}</span>
+                      {selectedPrice ? (
+                        <span className="badge price"><i className="fas fa-dollar-sign" aria-hidden="true"></i> {selectedPrice}</span>
+                      ) : null}
+                    </div>
+                  </div>
+                  <button
+                    className={`icon-btn${isSelectedSaved ? ' saved' : ''}`}
+                    type="button"
+                    aria-pressed={isSelectedSaved}
+                    title={isSelectedSaved ? 'Remove from saved' : 'Save this place'}
+                    onClick={event => handleSavedToggle(event, selectedPlace)}
+                  >
+                    <i className={isSelectedSaved ? 'fas fa-star' : 'far fa-star'} aria-hidden="true"></i>
+                    <span className="sr-only">{isSelectedSaved ? 'Remove from saved' : 'Save this place'}</span>
+                  </button>
+                </header>
+
+                <p className="status-line"><span className="badge status" data-state={selectedStatus.state}>{selectedStatus.label}</span></p>
+                <p><strong>Address:</strong> {selectedPlace.formatted_address || selectedPlace.address || '--'}</p>
+                <p><strong>Phone:</strong> {selectedPlace.international_phone_number || selectedPlace.formatted_phone_number || selectedPlace.phone || '--'}</p>
+                <p><strong>Website:</strong> {selectedWebsite ? <a href={selectedWebsite} target="_blank" rel="noreferrer">{selectedWebsiteLabel}</a> : '--'}</p>
+                <div className="hours-block">
+                  <h4><i className="fas fa-clock" aria-hidden="true"></i> Opening Hours</h4>
+                  <ul className="opening-hours">
+                    {selectedOpeningHours.length ? selectedOpeningHours.map((line, index) => <li key={`hours-${index}`}>{line}</li>) : <li>Not available</li>}
+                  </ul>
+                </div>
+              </div>
+            ) : (
+              <div className="panel-placeholder">Select a place on the map to view full details.</div>
+            )}
+          </aside>
         </div>
         <aside className="explore-sidebar">
           <div className="explore-controls">
@@ -314,58 +365,6 @@ export default function Explore() {
           </div>
         </aside>
       </section>
-
-      <aside className={`explore-details${selectedPlace ? ' is-active' : ''}`} id="exploreDetailsPanel" aria-live="polite">
-        <button
-          id="exploreDetailsClose"
-          className="icon-btn light"
-          type="button"
-          aria-label="Close details"
-          onClick={() => setSelectedPlace(null)}
-        >
-          <i className="fas fa-times" aria-hidden="true"></i>
-        </button>
-        {selectedPlace ? (
-          <div className="explore-detail-body">
-            <header className="place-header">
-              <div className="place-header-text">
-                <h3>{selectedPlace.name || '--'}</h3>
-                <div className="place-meta">
-                  <span className="badge muted">{selectedPlace.category || '--'}</span>
-                  <span className="badge rating"><i className="fas fa-star" aria-hidden="true"></i> {formatRating(selectedPlace.rating)}</span>
-                  <span className="badge muted">{selectedSummary || '--'}</span>
-                  {selectedPrice ? (
-                    <span className="badge price"><i className="fas fa-dollar-sign" aria-hidden="true"></i> {selectedPrice}</span>
-                  ) : null}
-                </div>
-              </div>
-              <button
-                className={`icon-btn${isSelectedSaved ? ' saved' : ''}`}
-                type="button"
-                aria-pressed={isSelectedSaved}
-                title={isSelectedSaved ? 'Remove from saved' : 'Save this place'}
-                onClick={event => handleSavedToggle(event, selectedPlace)}
-              >
-                <i className={isSelectedSaved ? 'fas fa-star' : 'far fa-star'} aria-hidden="true"></i>
-                <span className="sr-only">{isSelectedSaved ? 'Remove from saved' : 'Save this place'}</span>
-              </button>
-            </header>
-
-            <p className="status-line"><span className="badge status" data-state={selectedStatus.state}>{selectedStatus.label}</span></p>
-            <p><strong>Address:</strong> {selectedPlace.formatted_address || selectedPlace.address || '--'}</p>
-            <p><strong>Phone:</strong> {selectedPlace.international_phone_number || selectedPlace.formatted_phone_number || selectedPlace.phone || '--'}</p>
-            <p><strong>Website:</strong> {selectedWebsite ? <a href={selectedWebsite} target="_blank" rel="noreferrer">{selectedWebsiteLabel}</a> : '--'}</p>
-            <div className="hours-block">
-              <h4><i className="fas fa-clock" aria-hidden="true"></i> Opening Hours</h4>
-              <ul className="opening-hours">
-                {selectedOpeningHours.length ? selectedOpeningHours.map((line, index) => <li key={`hours-${index}`}>{line}</li>) : <li>Not available</li>}
-              </ul>
-            </div>
-          </div>
-        ) : (
-          <div className="panel-placeholder">Select a place on the map to view full details.</div>
-        )}
-      </aside>
     </div>
   )
 }

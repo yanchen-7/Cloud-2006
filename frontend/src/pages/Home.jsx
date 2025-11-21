@@ -731,38 +731,6 @@ export default function Home() {
                   </div>
                 </dl>
 
-                <section className="place-reviews" aria-labelledby="placeReviewsTitle">
-                  <div className="section-heading">
-                    <h4 id="placeReviewsTitle"><i className="fas fa-star-half-alt" aria-hidden="true"></i> Visitor Reviews</h4>
-                    <span className="badge muted" id="placeReviewsSummary">{summaryLabel || '--'}</span>
-                  </div>
-                      <div className="reviews-stack" id="placeReviewsList">
-                    {visibleReviews.length ? visibleReviews.map(review => (
-                      <article key={`${selectedPlace.place_id}-${review.author_name}-${review.publish_time ?? review.time ?? Math.random()}`} className="review-card">
-                        <div className="review-header">
-                          <span className="review-rating"><i className="fas fa-star" aria-hidden="true"></i> {formatRating(review?.rating)}</span>
-                          <span>{getReviewAuthor(review)}</span>
-                          {renderSentimentBadge(review)}
-                        </div>
-                        <span className="review-date">{formatDateLabel(review?.publish_time || review?.time)}</span>
-                        <p className="review-text">{formatReviewSnippet(review?.review_text || review?.text)}</p>
-                      </article>
-                    )) : (
-                      <div className="panel-placeholder">No reviews yet.</div>
-                    )}
-                  </div>
-                  {canToggleReviews ? (
-                    <button
-                      id="placeReviewsToggle"
-                      className="btn ghost"
-                      type="button"
-                      onClick={() => setReviewsExpanded(value => !value)}
-                    >
-                      {reviewsExpanded ? 'Show fewer reviews' : 'Show more reviews'}
-                    </button>
-                  ) : null}
-                </section>
-
                 <section className="user-review" aria-labelledby="userReviewTitle">
                   <h4 id="userReviewTitle"><i className="fas fa-pen-to-square" aria-hidden="true"></i> Share Your Experience</h4>
                   {session?.authenticated ? (
@@ -852,46 +820,49 @@ export default function Home() {
             <span><i className="fas fa-location-crosshairs" aria-hidden="true"></i> You</span>
             <span><i className="fas fa-map-marker-alt" aria-hidden="true"></i> Selected Places</span>
           </div>
-        </div>
-      </section>
-
-      <section className="card data-viz">
-        <div className="card-header">
-          <div>
-            <h2><i className="fas fa-chart-bar" aria-hidden="true"></i> Data Visualisation</h2>
-            <p>Explore ratings distribution by category.</p>
-          </div>
-        </div>
-        <div className="viz-body">
-          <canvas ref={chartRef} id="ratingsChart" height="220" style={{ width: '100%', height: '220px' }}></canvas>
-        </div>
-      </section>
-
-      <section className="card reviews">
-        <div className="card-header">
-          <div>
-            <h2><i className="fas fa-comments" aria-hidden="true"></i> Recent Reviews</h2>
-            <p>Latest visitor reviews from our places database.</p>
-          </div>
-        </div>
-        <div className="reviews-body">
-          <div className="reviews-list" id="reviewsList">
-            {globalReviews.length ? globalReviews.map(review => (
-              <article key={`${review.placeId}-${review.author_name}-${review.publish_time ?? review.time ?? Math.random()}`} className="review-card">
-                <div className="review-header">
-                  <span className="review-rating"><i className="fas fa-star" aria-hidden="true"></i> {formatRating(review?.rating)}</span>
-                  <span>{getReviewAuthor(review)}</span>
-                  {renderSentimentBadge(review)}
+          <div className="map-reviews place-reviews" aria-labelledby="placeReviewsTitle">
+            <div className="section-heading">
+              <h4 id="placeReviewsTitle"><i className="fas fa-star-half-alt" aria-hidden="true"></i> Visitor Reviews</h4>
+              <span className="badge muted" id="placeReviewsSummary">{summaryLabel || '--'}</span>
+            </div>
+            {selectedPlace ? (
+              <>
+                <div className="reviews-stack" id="placeReviewsList">
+                  {visibleReviews.length ? visibleReviews.map(review => (
+                    <article
+                      key={`${selectedPlace.place_id}-${review.author_name}-${review.publish_time ?? review.time ?? Math.random()}`}
+                      className="review-card"
+                    >
+                      <div className="review-header">
+                        <span className="review-rating"><i className="fas fa-star" aria-hidden="true"></i> {formatRating(review?.rating)}</span>
+                        <span>{getReviewAuthor(review)}</span>
+                        {renderSentimentBadge(review)}
+                      </div>
+                      <span className="review-date">{formatDateLabel(review?.publish_time || review?.time)}</span>
+                      <p className="review-text">{formatReviewSnippet(review?.review_text || review?.text)}</p>
+                    </article>
+                  )) : (
+                    <div className="panel-placeholder">No reviews yet.</div>
+                  )}
                 </div>
-                <span className="review-date">{formatDateLabel(review?.publish_time || review?.time)} - {review.placeName}</span>
-                <p className="review-text">{formatReviewSnippet(review?.review_text || review?.text)}</p>
-              </article>
-            )) : (
-              <div className="panel-placeholder">No reviews yet. Be the first to share.</div>
+                {canToggleReviews ? (
+                  <button
+                    id="placeReviewsToggle"
+                    className="btn ghost"
+                    type="button"
+                    onClick={() => setReviewsExpanded(value => !value)}
+                  >
+                    {reviewsExpanded ? 'Show fewer reviews' : 'Show more reviews'}
+                  </button>
+                ) : null}
+              </>
+            ) : (
+              <div className="panel-placeholder">Select a place on the map to view its reviews.</div>
             )}
           </div>
         </div>
       </section>
+
     </main>
   )
 }
