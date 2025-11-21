@@ -1,10 +1,12 @@
 import React, { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 
 export default function Profile(){
   const [session, setSession] = useState(null)
   const [form, setForm] = useState({ email:'', gender:'', date_of_birth:'', country_of_origin:'', password:'', confirm:'' })
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const navigate = useNavigate()
 
   useEffect(() => {
     async function load(){
@@ -72,6 +74,22 @@ export default function Profile(){
     setMessage('Profile updated successfully')
   }
 
+  async function handleLogout() {
+    setMessage('')
+    setError('')
+    try {
+      const res = await fetch('/api/session/logout', {
+        method: 'POST',
+        credentials: 'include'
+      })
+      if (!res.ok) throw new Error('Logout failed')
+      navigate('/login')
+    } catch (err) {
+      const payload = err.response ? await err.response.json().catch(() => ({})) : {}
+      setError(payload.error || 'Logout failed. Please try again.')
+    }
+  }
+
   if (!session?.authenticated) return <div className="empty">Please login first.</div>
   return (
     <section className="profile-wrapper">
@@ -89,7 +107,10 @@ export default function Profile(){
           </div>
           {error && <div className="error">{error}</div>}
           {message && <div className="success">{message}</div>}
-          <div className="form-actions"><button type="submit" className="btn primary">Save Changes</button></div>
+          <div className="form-actions">
+            <button type="submit" className="btn primary">Save Changes</button>
+            <button type="button" className="btn" onClick={handleLogout}>Logout</button>
+          </div>
         </form>
       </div>
     </section>
