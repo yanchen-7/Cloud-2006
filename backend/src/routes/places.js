@@ -58,6 +58,7 @@ const placeReviewsLimit = resolveNumber(
 
 const LIST_CACHE_KEY = "places:all";
 const PLACE_DETAIL_LOG_PREFIX = "/api/places";
+const DAILY_TOP_CACHE_KEY = "places:daily-top5:yesterday";
 
 function withQueryTimeout(sql, timeoutMs) {
   if (Number.isFinite(timeoutMs) && timeoutMs > 0) {
@@ -176,6 +177,146 @@ router.get("/", async (_req, res) => {
       sqlState: e.sqlState,
     });
     res.status(500).json({ error: "Failed to fetch places" });
+  }
+});
+
+router.get("/daily-top5", async (_req, res) => {
+  try {
+    const cached = await getCachedJson(DAILY_TOP_CACHE_KEY);
+    if (cached) {
+      return res.json(cached);
+    }
+
+    let rows;
+    try {
+      // Primary path: sentiment-based daily top 5 (when schema supports sentiment_score/status)
+      [rows] = await pool.query(
+        withQueryTimeout(
+          `SELECT
+             r.place_id,
+             b.place_name AS name,
+             b.address,
+             b.latitude,
+             b.longitude,
+             b.category,
+             b.international_phone_number,
+             b.website,
+             b.opening_hours,
+             b.rating,
+             b.price_level,
+             AVG(r.sentiment_score) AS avg_sentiment,
+             COUNT(*) AS review_count
+           FROM review r
+           INNER JOIN business_info b
+             ON r.place_id COLLATE utf8mb4_unicode_ci =
+                b.place_id COLLATE utf8mb4_unicode_ci
+           WHERE r.status = 'approved'
+             AND r.deleted_at IS NULL
+             AND r.sentiment_score IS NOT NULL
+             AND DATE(r.publish_time) = (
+               SELECT MAX(DATE(publish_time))
+               FROM review
+               WHERE status = 'approved'
+                 AND deleted_at IS NULL
+                 AND sentiment_score IS NOT NULL
+             )
+           GROUP BY r.place_id,
+                    name,
+                    b.address,
+                    b.latitude,
+                    b.longitude,
+                    b.category,
+                    b.international_phone_number,
+                    b.website,
+                    b.opening_hours,
+                    b.rating,
+                    b.price_level
+           HAVING review_count > 0
+           ORDER BY avg_sentiment DESC, review_count DESC
+           LIMIT 5`,
+          listQueryTimeoutMs
+        )
+      );
+    } catch (err) {
+      if (err?.code === "ER_BAD_FIELD_ERROR") {
+        // Fallback: schema without sentiment_score/status -> use latest-day rating/count only
+        [rows] = await pool.query(
+          withQueryTimeout(
+            `SELECT
+               r.place_id,
+               b.place_name AS name,
+               b.address,
+               b.latitude,
+               b.longitude,
+               b.category,
+               b.international_phone_number,
+               b.website,
+               b.opening_hours,
+               b.rating,
+               b.price_level,
+               NULL AS avg_sentiment,
+               COUNT(*) AS review_count
+             FROM review r
+             INNER JOIN business_info b
+               ON r.place_id COLLATE utf8mb4_unicode_ci =
+                  b.place_id COLLATE utf8mb4_unicode_ci
+             WHERE (r.deleted_at IS NULL OR r.deleted_at = '')
+               AND DATE(r.publish_time) = (
+                 SELECT MAX(DATE(publish_time))
+                 FROM review
+                 WHERE (deleted_at IS NULL OR deleted_at = '')
+               )
+             GROUP BY r.place_id,
+                      name,
+                      b.address,
+                      b.latitude,
+                      b.longitude,
+                      b.category,
+                      b.international_phone_number,
+                      b.website,
+                      b.opening_hours,
+                      b.rating,
+                      b.price_level
+             HAVING review_count > 0
+             ORDER BY b.rating DESC, review_count DESC
+             LIMIT 5`,
+            listQueryTimeoutMs
+          )
+        );
+      } else {
+        throw err;
+      }
+    }
+
+    const results = rows.map((row, index) => ({
+      rank: index + 1,
+      avg_sentiment:
+        row.avg_sentiment != null ? Number(row.avg_sentiment) : null,
+      review_count: Number(row.review_count || 0),
+      place: {
+        place_id: row.place_id,
+        name: row.name,
+        formatted_address: row.address,
+        address: row.address,
+        latitude: row.latitude,
+        longitude: row.longitude,
+        category: row.category,
+        international_phone_number: row.international_phone_number,
+        website: row.website,
+        opening_hours: parseOpeningHours(row.opening_hours),
+        rating: row.rating,
+        price_level: row.price_level,
+      },
+    }));
+
+    if (listTtl > 0) {
+      await setCachedJson(DAILY_TOP_CACHE_KEY, results, listTtl);
+    }
+
+    res.json(results);
+  } catch (e) {
+    console.error("/api/places/daily-top5 error:", e);
+    res.status(500).json({ error: "Failed to fetch daily top 5 places" });
   }
 });
 

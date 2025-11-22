@@ -31,6 +31,8 @@ export default function Home() {
   const [isSubmittingReview, setIsSubmittingReview] = useState(false)
   const [reviewFeedback, setReviewFeedback] = useState({ type: null, message: '' })
   const [recommendations, setRecommendations] = useState([])
+  const [dailyTopPlaces, setDailyTopPlaces] = useState([])
+  const [isLoadingDailyTop, setIsLoadingDailyTop] = useState(false)
 
   // Initialize Leaflet icons
   useEffect(() => {
@@ -139,6 +141,22 @@ export default function Home() {
     }
   }, [])
 
+  const loadDailyTopPlaces = useCallback(async () => {
+    setIsLoadingDailyTop(true)
+    try {
+      const response = await fetch('/api/places/daily-top5')
+      if (!response.ok) throw new Error('Failed to fetch daily top 5')
+      const data = await response.json()
+      const list = Array.isArray(data) ? data : []
+      setDailyTopPlaces(list)
+    } catch (error) {
+      console.error('Unable to load daily top 5', error)
+      setDailyTopPlaces([])
+    } finally {
+      setIsLoadingDailyTop(false)
+    }
+  }, [])
+
 
   useEffect(() => {
     loadPlaces()
@@ -151,6 +169,9 @@ export default function Home() {
   useEffect(() => {
     loadRecommendations()
   }, [loadRecommendations])
+  useEffect(() => {
+    loadDailyTopPlaces()
+  }, [loadDailyTopPlaces])
 
   // Callback ref to initialize the map safely
   const mapContainerRef = useCallback(node => {
@@ -586,19 +607,61 @@ export default function Home() {
   return (
     <main className="page-content">
       <section className="top-row">
+        <div className="card daily-top-five">
+          <div className="card-header">
+            <div>
+              <h2><i className="fas fa-list-ol" aria-hidden="true"></i> Daily Top 5</h2>
+              <p>Best-reviewed spots from the latest day with reviews, by sentiment.</p>
+            </div>
+          </div>
+          <ol className="daily-top-list">
+            {dailyTopPlaces.length
+              ? dailyTopPlaces.map((entry, index) => {
+                  const place = entry.place || entry
+                  const rank = entry.rank != null ? entry.rank : index + 1
+                  return (
+                    <li
+                      key={place.place_id || place.name || index}
+                      className="daily-top-item"
+                      onClick={() => handleSelectPlace(place)}
+                    >
+                      <div className="daily-top-rank">#{rank}</div>
+                      <div className="daily-top-main">
+                        <div className="daily-top-name">{place.name || '--'}</div>
+                        <div className="daily-top-meta">
+                          {place.category ? (
+                            <span className="daily-top-category">{place.category}</span>
+                          ) : null}
+                          {Number.isFinite(Number(entry.avg_sentiment)) ? (
+                            <span className="daily-top-rating">
+                              {entry.avg_sentiment > 0 ? '😊' : entry.avg_sentiment < 0 ? '☹️' : '😐'}{" "}
+                              {entry.avg_sentiment.toFixed(2)}
+                            </span>
+                          ) : Number.isFinite(Number(place.rating)) ? (
+                            <span className="daily-top-rating">
+                              <i className="fas fa-star" aria-hidden="true"></i> {formatRating(place.rating)}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                    </li>
+                  )
+                })
+              : (
+                <li className="daily-top-empty">
+                  {isLoadingDailyTop
+                    ? 'Loading Daily Top 5…'
+                    : 'No reviews from yesterday yet — check back tomorrow!'}
+                </li>
+              )}
+          </ol>
+        </div>
+
         <div className="card recommendations">
           <div className="card-header">
             <div>
               <h2><i className="fas fa-star" aria-hidden="true"></i> Recommendations of the Day</h2>
               <p>Fresh picks across popular categories, updated every day.</p>
-            </div>
-            <div className="slider-controls">
-              <button className="slider-btn" id="recPrev" type="button" aria-label="Previous recommendation" onClick={goToPreviousRecommendation}>
-                <i className="fas fa-chevron-left" aria-hidden="true"></i>
-              </button>
-              <button className="slider-btn" id="recNext" type="button" aria-label="Next recommendation" onClick={goToNextRecommendation}>
-                <i className="fas fa-chevron-right" aria-hidden="true"></i>
-              </button>
             </div>
           </div>
           <div className="slider" id="recommendationSlider">
@@ -620,7 +683,7 @@ export default function Home() {
                     </div>
                   </div>
                   <div className="map-preview">
-                    <div className="category">{entry.place?.category || 'Hot pick'}</div>
+                    {/* Intentionally left blank to avoid large blue category label */}
                   </div>
                 </div>
               )) : (
@@ -640,6 +703,14 @@ export default function Home() {
                 />
               ))}
             </div>
+          </div>
+          <div className="slider-controls">
+            <button className="slider-btn" id="recPrev" type="button" aria-label="Previous recommendation" onClick={goToPreviousRecommendation}>
+              <i className="fas fa-chevron-left" aria-hidden="true"></i>
+            </button>
+            <button className="slider-btn" id="recNext" type="button" aria-label="Next recommendation" onClick={goToNextRecommendation}>
+              <i className="fas fa-chevron-right" aria-hidden="true"></i>
+            </button>
           </div>
         </div>
 
@@ -836,7 +907,6 @@ export default function Home() {
                       <div className="review-header">
                         <span className="review-rating"><i className="fas fa-star" aria-hidden="true"></i> {formatRating(review?.rating)}</span>
                         <span>{getReviewAuthor(review)}</span>
-                        {renderSentimentBadge(review)}
                       </div>
                       <span className="review-date">{formatDateLabel(review?.publish_time || review?.time)}</span>
                       <p className="review-text">{formatReviewSnippet(review?.review_text || review?.text)}</p>

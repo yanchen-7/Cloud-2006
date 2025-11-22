@@ -17,20 +17,43 @@ router.get("/", async (req, res) => {
   try {
     const { place_id } = req.query;
     if (place_id) {
-      const [reviews] = await pool.query(
-        // Adapt to the updated 'review' table schema
-        `SELECT place_id, place_name, address, rating, review_text, publish_time, author_name, sentiment_score, sentiment_label
-         FROM review
-         WHERE place_id = ? AND status = 'approved' AND deleted_at IS NULL
-         ORDER BY publish_time DESC`,
-        [place_id]
-      );
-      const [summaryRows] = await pool.query(
-        `SELECT COUNT(*) AS total_reviews, AVG(rating) AS average_rating
-         FROM review
-         WHERE place_id = ? AND rating IS NOT NULL AND status = 'approved' AND deleted_at IS NULL`,
-        [place_id]
-      );
+      let reviews = [];
+      let summaryRows = [];
+      try {
+        const [rev] = await pool.query(
+          `SELECT place_id, place_name, address, rating, review_text, publish_time, author_name, sentiment_score, sentiment_label
+           FROM review
+           WHERE place_id = ? AND status = 'approved' AND deleted_at IS NULL
+           ORDER BY publish_time DESC`,
+          [place_id]
+        );
+        reviews = rev;
+        const [sum] = await pool.query(
+          `SELECT COUNT(*) AS total_reviews, AVG(rating) AS average_rating
+           FROM review
+           WHERE place_id = ? AND rating IS NOT NULL AND status = 'approved' AND deleted_at IS NULL`,
+          [place_id]
+        );
+        summaryRows = sum;
+      } catch (err) {
+        if (err?.code !== "ER_BAD_FIELD_ERROR") throw err;
+        // Fallback for schemas without status/sentiment_score columns
+        const [rev] = await pool.query(
+          `SELECT place_id, place_name, address, rating, review_text, publish_time, author_name, sentiment_label
+           FROM review
+           WHERE place_id = ? AND (deleted_at IS NULL OR deleted_at = '')
+           ORDER BY publish_time DESC`,
+          [place_id]
+        );
+        reviews = rev;
+        const [sum] = await pool.query(
+          `SELECT COUNT(*) AS total_reviews, AVG(rating) AS average_rating
+           FROM review
+           WHERE place_id = ? AND rating IS NOT NULL AND (deleted_at IS NULL OR deleted_at = '')`,
+          [place_id]
+        );
+        summaryRows = sum;
+      }
       return res.json({
         place_id,
         reviews,
@@ -76,42 +99,61 @@ router.post("/", requireAuth, async (req, res) => {
       review_text: trimmedReview,
       author_name: user.username,
       account_id: user.account_id ?? null,
-      source: "user",
-      status: "approved",
       submitted_at: new Date().toISOString(),
     };
 
+    // Schema-aware insert: attempt widest set, then fall back to match current table.
+    let inserted = false;
     try {
-      const queued = await enqueueReview(payload);
-      if (queued) {
-        deleteCacheKeys(`places:${payload.place_id}`, PLACES_LIST_CACHE_KEY).catch((err) => {
-          console.warn("Cache invalidation failed after enqueuing review:", err);
-        });
-        return res.status(202).json({ message: "Review accepted for processing" });
-      }
-    } catch (queueError) {
-      console.warn("Failed to enqueue review message. Falling back to direct insert.", queueError);
+      await pool.query(
+        `INSERT INTO review
+           (place_id, place_name, address, rating, review_text, publish_time, author_name, account_id, sentiment_label)
+         VALUES (?, ?, ?, ?, ?, NOW(), ?, ?, NULL)`,
+        [
+          payload.place_id,
+          payload.place_name,
+          payload.address,
+          payload.rating,
+          payload.review_text,
+          payload.author_name,
+          payload.account_id,
+        ]
+      );
+      inserted = true;
+    } catch (dbErr) {
+      if (dbErr?.code !== "ER_BAD_FIELD_ERROR") throw dbErr;
     }
 
-    await pool.query(
-      `INSERT INTO review
-         (place_id, place_name, address, rating, review_text, publish_time, author_name, account_id, source, status)
-       VALUES (?, ?, ?, ?, ?, NOW(), ?, ?, ?, ?)`,
-      [
-        payload.place_id,
-        payload.place_name,
-        payload.address,
-        payload.rating,
-        payload.review_text,
-        payload.author_name,
-        payload.account_id,
-        payload.source,
-        payload.status,
-      ]
-    );
+    if (!inserted) {
+      await pool.query(
+        `INSERT INTO review
+           (place_id, place_name, address, rating, review_text, publish_time, author_name)
+         VALUES (?, ?, ?, ?, ?, NOW(), ?)`,
+        [
+          payload.place_id,
+          payload.place_name,
+          payload.address,
+          payload.rating,
+          payload.review_text,
+          payload.author_name,
+        ]
+      );
+    }
+
     deleteCacheKeys(`places:${payload.place_id}`, PLACES_LIST_CACHE_KEY).catch((err) => {
       console.warn("Cache invalidation failed after direct DB insert:", err);
     });
+
+    // Best-effort: also enqueue to SQS for downstream processing/analytics.
+    try {
+      const queued = await enqueueReview(payload);
+      if (!queued) {
+        console.warn("Review queue URL not configured; proceeding without queue.");
+      }
+    } catch (queueError) {
+      console.warn("Failed to enqueue review message after DB insert:", queueError);
+    }
+
     res.status(201).json({ message: "Review recorded" });
   } catch (e) {
     console.error("/api/reviews POST error:", e);
