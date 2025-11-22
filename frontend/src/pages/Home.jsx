@@ -632,16 +632,25 @@ export default function Home() {
                           {place.category ? (
                             <span className="daily-top-category">{place.category}</span>
                           ) : null}
-                          {Number.isFinite(Number(entry.avg_sentiment)) ? (
-                            <span className="daily-top-rating">
-                              {entry.avg_sentiment > 0 ? '😊' : entry.avg_sentiment < 0 ? '☹️' : '😐'}{" "}
-                              {entry.avg_sentiment.toFixed(2)}
-                            </span>
-                          ) : Number.isFinite(Number(place.rating)) ? (
-                            <span className="daily-top-rating">
-                              <i className="fas fa-star" aria-hidden="true"></i> {formatRating(place.rating)}
-                            </span>
-                          ) : null}
+                          {(() => {
+                            const sentimentValue = Number(entry.avg_sentiment)
+                            if (Number.isFinite(sentimentValue)) {
+                              const face = sentimentValue > 0 ? '😊' : sentimentValue < 0 ? '☹️' : '😐'
+                              return (
+                                <span className="daily-top-rating">
+                                  {face} {sentimentValue.toFixed(2)}
+                                </span>
+                              )
+                            }
+                            if (Number.isFinite(Number(place.rating))) {
+                              return (
+                                <span className="daily-top-rating">
+                                  <i className="fas fa-star" aria-hidden="true"></i> {formatRating(place.rating)}
+                                </span>
+                              )
+                            }
+                            return null
+                          })()}
                         </div>
                       </div>
                     </li>
