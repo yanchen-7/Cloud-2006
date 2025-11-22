@@ -8,8 +8,6 @@
     "sentiment:run": "node src/jobs/sentimentWorker.js"
   },
   "dependencies": {
-    "@aws-sdk/client-athena": "^3.910.0",
-    "@aws-sdk/client-s3": "^3.910.0",
     "@aws-sdk/client-secrets-manager": "^3.910.0",
     "@aws-sdk/client-sqs": "^3.910.0",
     "bcryptjs": "^2.4.3",
@@ -21,7 +19,6 @@
     "mysql2": "^3.11.3",
     "node-fetch": "^3.3.2",
     "nodemailer": "^6.9.14",
-    "parquetjs-lite": "^0.8.1",
     "redis": "^4.7.1",
     "sentiment": "^5.0.2"
   },
