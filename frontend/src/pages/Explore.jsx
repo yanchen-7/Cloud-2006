@@ -621,12 +621,13 @@ export default function Explore() {
                           role="button"
                           tabIndex={0}
                           onClick={() => {
-                            handleSelectPlace(rec)
-                            focusMarker(rec)   // ✅ fly to marker
+                            handleSelectPlace(rec, { focus: true })
+                            focusMarker(rec)   // fly to marker
                           }}
                           onKeyDown={e => {
                             handleItemKeyDown(e, rec)
                             if (e.key === 'Enter' || e.key === ' ') {
+                              handleSelectPlace(rec, { focus: true })
                               focusMarker(rec)
                             }
                           }}
