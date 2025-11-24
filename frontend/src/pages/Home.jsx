@@ -1,6 +1,7 @@
 ﻿import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import L from 'leaflet'
 import 'leaflet/dist/leaflet.css'
+import PlaceInsights from '../components/PlaceInsights'
 
 const SENTOSA = { lat: 1.249404, lng: 103.830321 }
 const MAX_MARKERS = 25
@@ -17,6 +18,10 @@ export default function Home() {
   const [places, setPlaces] = useState([])
   const [selectedPlace, setSelectedPlace] = useState(null)
   const [selectedCategory, setSelectedCategory] = useState('')
+  
+  // STATE FOR FILTER
+  const [top5Category, setTop5Category] = useState('All') 
+  
   const [savedPlaces, setSavedPlaces] = useState(() => new Set())
   const [currentSlide, setCurrentSlide] = useState(0)
   const [isLoadingPlaces, setIsLoadingPlaces] = useState(false)
@@ -39,7 +44,7 @@ export default function Home() {
     if (typeof window !== 'undefined' && typeof L !== 'undefined' && !iconsRef.current) {
       iconsRef.current = {
         default: L.icon({
-          iconUrl: 'https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-icon-red.png',
+          iconUrl: 'https://cdn.jsdelivr.net/gh/pointhi/leaflet-color-markers@master/img/marker-icon-blue.png',
           shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/images/marker-shadow.png',
           iconSize: [25, 41],
           iconAnchor: [12, 41],
@@ -88,7 +93,6 @@ export default function Home() {
     try {
       let url = '/api/places';
       if (userLocation) {
-        // Radius of 10km for the home page
         url += `?lat=${userLocation.lat}&lng=${userLocation.lng}&radius=10`;
       }
       const placesResponse = await fetch(url);
@@ -141,10 +145,15 @@ export default function Home() {
     }
   }, [])
 
+  // Load Daily Top with Category Filter
   const loadDailyTopPlaces = useCallback(async () => {
     setIsLoadingDailyTop(true)
     try {
-      const response = await fetch('/api/places/daily-top5')
+      const url = top5Category === 'All' 
+        ? '/api/insights/top'
+        : `/api/insights/top?category=${encodeURIComponent(top5Category)}`;
+        
+      const response = await fetch(url) 
       if (!response.ok) throw new Error('Failed to fetch daily top 5')
       const data = await response.json()
       const list = Array.isArray(data) ? data : []
@@ -155,7 +164,7 @@ export default function Home() {
     } finally {
       setIsLoadingDailyTop(false)
     }
-  }, [])
+  }, [top5Category]) 
 
 
   useEffect(() => {
@@ -169,13 +178,13 @@ export default function Home() {
   useEffect(() => {
     loadRecommendations()
   }, [loadRecommendations])
+
   useEffect(() => {
     loadDailyTopPlaces()
   }, [loadDailyTopPlaces])
 
-  // Callback ref to initialize the map safely
   const mapContainerRef = useCallback(node => {
-    if (!node || mapRef.current || typeof L === 'undefined') return; // Ensure node exists and map is not already initialized
+    if (!node || mapRef.current || typeof L === 'undefined') return;
 
     const map = L.map(node, { zoomControl: true }).setView([SENTOSA.lat, SENTOSA.lng], 13);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -185,7 +194,6 @@ export default function Home() {
 
     mapRef.current = map;
 
-    // Cleanup function for when the component unmounts
     return () => {
       if (mapRef.current) {
         mapRef.current.remove();
@@ -199,7 +207,6 @@ export default function Home() {
       setSelectedPlace(null)
       return
     }
-    // Log click for recommender
     if (place.place_id) {
       fetch('/api/places/clicks', {
         method: 'POST',
@@ -218,6 +225,13 @@ export default function Home() {
     const placeId = place.place_id
     setReviewsExpanded(false)
     setSelectedPlace(place)
+    
+    if (mapRef.current && place.latitude && place.longitude) {
+        mapRef.current.setView([place.latitude, place.longitude], 15, {
+            animate: true
+        })
+    }
+
     try {
       const response = await fetch(`/api/places/${encodeURIComponent(placeId)}`)
       if (!response.ok) return
@@ -230,11 +244,28 @@ export default function Home() {
       console.warn('Failed to load place details', error)
     }
   }, [])
+
+  const categories = useMemo(() => {
+    const list = Array.isArray(places) ? places : []
+    const set = new Set()
+    list.forEach(place => {
+      if (place?.category) set.add(String(place.category))
+    })
+    return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
+  }, [places])
+
+  // UPDATED: Logic now ensures the Selected Place is ALWAYS rendered on the map
   const filteredPlaces = useMemo(() => {
     const list = Array.isArray(places) ? places : []
-    if (!list.length) return []
-    const byCategory = selectedCategory ? list.filter(place => place.category === selectedCategory) : list.slice()
+    
+    // 1. Filter by Category & Limit (Standard logic)
+    const byCategory = selectedCategory 
+      ? list.filter(place => place.category === selectedCategory) 
+      : list.slice()
+    
     const limited = byCategory.slice(0, MAX_MARKERS)
+
+    // 2. Ensure Saved Places are visible (Standard logic)
     if (savedPlaces.size) {
       list.forEach(place => {
         if (savedPlaces.has(place.place_id) && !limited.find(item => item.place_id === place.place_id)) {
@@ -242,29 +273,47 @@ export default function Home() {
         }
       })
     }
+
+    // 3. NEW FIX: Ensure Selected Place (from Top 5) is visible
+    if (selectedPlace) {
+      const alreadyVisible = limited.find(p => p.place_id === selectedPlace.place_id)
+      if (!alreadyVisible) {
+        // Only add if it has valid coordinates
+        if (selectedPlace.latitude && selectedPlace.longitude) {
+          limited.push(selectedPlace)
+        }
+      }
+    }
+
     return limited
-  }, [places, selectedCategory, savedPlaces])
+  }, [places, selectedCategory, savedPlaces, selectedPlace])
 
   const totalPlaces = Array.isArray(places) ? places.length : 0
 
   useEffect(() => {
-  if (!mapRef.current || !icons) return;
-  markersRef.current.forEach(marker => marker.remove());
-  markersRef.current = [];
+    if (!mapRef.current || !icons) return;
+    markersRef.current.forEach(marker => marker.remove());
+    markersRef.current = [];
 
-  filteredPlaces.forEach(place => {
-    const lat = Number(place?.latitude);
-    const lng = Number(place?.longitude);
-    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+    filteredPlaces.forEach(place => {
+      const lat = Number(place?.latitude);
+      const lng = Number(place?.longitude);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
 
-    const marker = L.marker([lat, lng], {
-      icon: savedPlaces.has(place.place_id) ? icons.saved : icons.default,
-    }).addTo(mapRef.current);
+      const isSelected = selectedPlace?.place_id === place.place_id;
+      const isSaved = savedPlaces.has(place.place_id);
+      
+      const markerIcon = (isSaved || isSelected) ? icons.saved : icons.default;
 
-    marker.on('click', () => handleSelectPlace(place));
-    markersRef.current.push(marker);
-  });
-}, [filteredPlaces, icons, savedPlaces, handleSelectPlace]);
+      const marker = L.marker([lat, lng], {
+        icon: markerIcon,
+        zIndexOffset: isSelected ? 1000 : 0
+      }).addTo(mapRef.current);
+
+      marker.on('click', () => handleSelectPlace(place));
+      markersRef.current.push(marker);
+    });
+  }, [filteredPlaces, icons, savedPlaces, selectedPlace, handleSelectPlace]);
 
 
   useEffect(() => {
@@ -284,15 +333,6 @@ export default function Home() {
     }
     mapRef.current.setView(latLng, 13)
   }, [icons, userLocation])
-
-  const categories = useMemo(() => {
-    const list = Array.isArray(places) ? places : []
-    const set = new Set()
-    list.forEach(place => {
-      if (place?.category) set.add(String(place.category))
-    })
-    return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
-  }, [places])
 
   const goToPreviousRecommendation = useCallback(() => {
     if (!recommendations.length) return
@@ -521,7 +561,6 @@ export default function Home() {
       .slice(0, 7)
   }, [places])
 
-    // Chart rendering effect
   useEffect(() => {
     const canvas = chartRef.current
     if (!canvas) return
@@ -608,13 +647,36 @@ export default function Home() {
     <main className="page-content">
       <section className="top-row">
         <div className="card daily-top-five">
-          <div className="card-header">
+          {/* UPDATED HEADER LAYOUT: 
+             - Block display allows stacking.
+             - Dropdown placed clearly below the text description with spacing.
+          */}
+          <div className="card-header" style={{ display: 'block' }}>
             <div>
-              <h2><i className="fas fa-list-ol" aria-hidden="true"></i> Daily Top 5</h2>
-              <p>Best-reviewed spots from the latest day with reviews, by sentiment.</p>
+              <h2><i className="fas fa-robot" aria-hidden="true"></i> Top 10 by AI Sentiment</h2>
+              <p>Highest rated spots based on AI analysis of reviews.</p>
+            </div>
+            <div className="top5-filter" style={{ marginTop: '1rem' }}>
+              <select 
+                className="category-select" 
+                value={top5Category} 
+                onChange={(e) => setTop5Category(e.target.value)}
+                style={{ padding: '0.5rem', fontSize: '0.9rem', width: '100%' }}
+              >
+                <option value="All">All Categories</option>
+                {categories.map(cat => (
+                  <option key={cat} value={cat}>{cat}</option>
+                ))}
+              </select>
             </div>
           </div>
-          <ol className="daily-top-list">
+
+          {/* UPDATED LIST LAYOUT:
+             - Fixed Max Height (~270px shows roughly 3.5 items)
+             - Scrollable (Overflow-Y)
+             - Padding right for scrollbar space
+          */}
+          <ol className="daily-top-list" style={{ maxHeight: '320px', overflowY: 'auto', paddingRight: '0.5rem' }}>
             {dailyTopPlaces.length
               ? dailyTopPlaces.map((entry, index) => {
                   const place = entry.place || entry
@@ -628,29 +690,19 @@ export default function Home() {
                       <div className="daily-top-rank">#{rank}</div>
                       <div className="daily-top-main">
                         <div className="daily-top-name">{place.name || '--'}</div>
-                        <div className="daily-top-meta">
+                        <div className="daily-top-meta" style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: '0.25rem' }}>
                           {place.category ? (
                             <span className="daily-top-category">{place.category}</span>
                           ) : null}
-                          {(() => {
-                            const sentimentValue = Number(entry.avg_sentiment)
-                            if (Number.isFinite(sentimentValue)) {
-                              const face = sentimentValue > 0 ? '😊' : sentimentValue < 0 ? '☹️' : '😐'
-                              return (
-                                <span className="daily-top-rating">
-                                  {face} {sentimentValue.toFixed(2)}
-                                </span>
-                              )
-                            }
-                            if (Number.isFinite(Number(place.rating))) {
-                              return (
-                                <span className="daily-top-rating">
-                                  <i className="fas fa-star" aria-hidden="true"></i> {formatRating(place.rating)}
-                                </span>
-                              )
-                            }
-                            return null
-                          })()}
+                          {place.nlp_score ? (
+                            <span className="badge" style={{ background: '#eef2ff', color: '#4f46e5', border: '1px solid #c7d2fe', fontSize: '0.75rem' }}>
+                              🤖 AI Score: {place.nlp_score}
+                            </span>
+                          ) : (
+                            <span className="daily-top-rating">
+                              <i className="fas fa-star" aria-hidden="true"></i> {formatRating(place.rating)}
+                            </span>
+                          )}
                         </div>
                       </div>
                     </li>
@@ -659,8 +711,8 @@ export default function Home() {
               : (
                 <li className="daily-top-empty">
                   {isLoadingDailyTop
-                    ? 'Loading Daily Top 5…'
-                    : 'No reviews from yesterday yet — check back tomorrow!'}
+                    ? 'Loading AI Recommendations…'
+                    : 'No spots found for this category.'}
                 </li>
               )}
           </ol>
@@ -810,6 +862,8 @@ export default function Home() {
                     </dd>
                   </div>
                 </dl>
+
+                <PlaceInsights placeId={selectedPlace.place_id} />
 
                 <section className="user-review" aria-labelledby="userReviewTitle">
                   <h4 id="userReviewTitle"><i className="fas fa-pen-to-square" aria-hidden="true"></i> Share Your Experience</h4>

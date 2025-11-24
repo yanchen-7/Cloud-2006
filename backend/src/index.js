@@ -24,6 +24,7 @@ import reviewsRouter from "./routes/reviews.js";
 import weatherRouter from "./routes/weather.js";
 import { initRedis, closeRedis } from "./cache/redis.js";
 import { apiRateLimiter, placesRateLimiter } from "./middleware/rateLimiter.js";
+import insightsRouter from "./routes/insights.js";
 
 const dbConfig = {
   host: process.env.DB_HOST,
@@ -101,6 +102,7 @@ app.get("/api", (_req, res) => {
 
 app.use("/api/session", sessionRouter);
 app.use("/api/places", placesRouter);
+app.use("/api/insights", insightsRouter);
 app.use("/api/favourites", favouritesRouter);
 app.use("/api/reviews", reviewsRouter);
 app.use("/api/weather", weatherRouter);
