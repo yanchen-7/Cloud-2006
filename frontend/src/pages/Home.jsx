@@ -738,9 +738,6 @@ export default function Home() {
                       {entry.rank ? (
                         <span className="badge muted">Hottest #{entry.rank}</span>
                       ) : null}
-                      {entry.score != null ? (
-                        <span className="badge muted">Score {Number(entry.score).toFixed(3)}</span>
-                      ) : null}
                     </div>
                   </div>
                   <div className="map-preview">

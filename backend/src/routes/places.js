@@ -135,7 +135,6 @@ async function fetchPlaceReviews(placeId, limit) {
     return { reviewsRows, summaryStats: summaryRows?.[0] ?? {} };
   } catch (err) {
     console.error("Failed to fetch reviews:", err);
-    // Return empty result instead of crashing
     return { reviewsRows: [], summaryStats: {} };
   }
 }
@@ -337,7 +336,6 @@ async function selectScoresFromS3Object({ bucket, key }) {
       }
     }
 
-    // Handle any trailing buffered line
     if (buffer.trim()) {
       try {
         rows.push(JSON.parse(buffer));
@@ -346,7 +344,6 @@ async function selectScoresFromS3Object({ bucket, key }) {
       }
     }
   } catch (err) {
-    // Propagate to allow downstream fallback to parquet reader
     throw err;
   }
 
@@ -359,7 +356,6 @@ async function computeTop5FromS3() {
 
   let rows = [];
 
-  // Try S3 Select first (fast path)
   try {
     if (S3_SELECT_ENABLE) {
       rows = await selectScoresFromS3Object(target);
@@ -369,7 +365,6 @@ async function computeTop5FromS3() {
     rows = [];
   }
 
-  // Fallback to full parquet read if select failed or returned nothing
   if (!rows.length) {
     const client = await ensureS3Client();
     const resp = await client.send(
@@ -501,7 +496,6 @@ router.get("/daily-top5", async (_req, res) => {
     }
 
     let rows;
-    // Primary path: use Athena daily scores grouped by locationid/place_id if available
     if (runAthenaQuery) {
       try {
         const athenaSql = `
@@ -538,7 +532,6 @@ router.get("/daily-top5", async (_req, res) => {
       }
     }
 
-    // Secondary path: read latest daily_scores from S3 (via SelectObjectContent) when Athena is blocked
     if (!rows || !rows.length) {
       try {
         const s3Top = await computeTop5FromS3();
@@ -548,7 +541,6 @@ router.get("/daily-top5", async (_req, res) => {
       }
     }
 
-    // Fallback to DB if Athena is unavailable or returned nothing
     if (!rows || !rows.length) {
       try {
         [rows] = await pool.query(
@@ -678,6 +670,62 @@ router.get("/recommendations", async (_req, res) => {
   }
 });
 
+/* =========================================================
+   ✅ NEW ROUTE: per-place recommendations from Spark table
+   GET /api/places/:placeId/recommendations?limit=8
+   ========================================================= */
+router.get("/:placeId/recommendations", async (req, res) => {
+  const placeId = req.params.placeId;
+  const limit = resolveNumber(req.query.limit, 8, { min: 1, max: 50 });
+
+  try {
+    const [rows] = await pool.query(
+      withQueryTimeout(
+        `
+        SELECT
+          r.rec_item_id AS place_id,
+          b.place_name AS name,
+          b.address AS formatted_address,
+          b.address,
+          b.latitude,
+          b.longitude,
+          b.category,
+          b.international_phone_number,
+          b.website,
+          b.opening_hours,
+          b.rating,
+          b.price_level,
+          r.score
+        FROM recommendations r
+        JOIN business_info b
+          ON r.rec_item_id COLLATE utf8mb4_unicode_ci =
+             b.place_id    COLLATE utf8mb4_unicode_ci
+        WHERE r.item_id COLLATE utf8mb4_unicode_ci =
+              ?          COLLATE utf8mb4_unicode_ci
+        ORDER BY r.score DESC
+        LIMIT ?;
+        `,
+        listQueryTimeoutMs
+      ),
+      [placeId, limit]
+    );
+
+    const recs = rows.map((row) => ({
+      ...row,
+      opening_hours: parseOpeningHours(row.opening_hours),
+      score: Number(row.score ?? 0),
+    }));
+
+    res.json({
+      item_id: placeId,
+      recommendations: recs,
+    });
+  } catch (e) {
+    console.error(`/api/places/${placeId}/recommendations error:`, e);
+    res.status(500).json({ error: "Failed to fetch recommendations" });
+  }
+});
+
 function pushClickRecord({ req, placeId, page, element, deviceType }) {
   const ip =
     req.headers["x-forwarded-for"]?.split(",")[0]?.trim() || req.ip || null;
@@ -772,16 +820,6 @@ router.get("/:placeId", async (req, res) => {
   try {
     const placeId = req.params.placeId;
     const cacheKey = `places:${placeId}`;
-    
-    // --- TEMPORARILY DISABLED CACHE TO FORCE REFRESH ---
-    // We commented this out so the server asks the database directly
-    /*
-    const cachedPlace = await getCachedJson(cacheKey);
-    if (cachedPlace) {
-      return res.json(cachedPlace);
-    }
-    */
-    // ----------------------------------------------------
 
     const [rows] = await pool.query(
       withQueryTimeout(

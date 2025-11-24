@@ -1191,3 +1191,71 @@ p {
 .map-hint i {
     color: var(--accent);
 }
+
+/* Recommended places block inside detail panel */
+.recs-block {
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid #eee;
+}
+
+.recs-block h4 {
+  margin: 0 0 8px;
+  font-size: 0.95rem;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+/* list */
+.recs-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* each recommendation card */
+.rec-item {
+  padding: 10px 12px;
+  border: 1px solid #eee;
+  border-radius: 10px;
+  background: #fff;
+  cursor: pointer;
+  transition: background 0.15s ease, transform 0.1s ease;
+}
+
+.rec-item:hover {
+  background: #fafafa;
+  transform: translateY(-1px);
+}
+
+.rec-title {
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+/* rating row */
+.rec-meta {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+.rec-meta .badge.rating {
+  margin: 0;         /* prevent weird spacing */
+}
+
+/* address */
+.rec-item .meta {
+  font-size: 0.9rem;
+  color: #555;
+  line-height: 1.3;
+}
+
+.recs-desc {
+  font-size: 0.85rem;
+  color: #666;
+  margin: 4px 0 10px;
+}
