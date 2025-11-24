@@ -91,11 +91,16 @@ async function fetchResults(queryExecutionId) {
   return parseRows(header, dataRows);
 }
 
-export async function runAthenaQuery(sql) {
+/**
+ * Run an Athena query.
+ * Optional outputLocation lets callers write results to a different S3 prefix.
+ */
+export async function runAthenaQuery(sql, { outputLocation } = {}) {
   if (!sql || typeof sql !== "string") {
     throw new Error("SQL query string is required to run Athena query");
   }
-  if (!ATHENA_OUTPUT) {
+  const resolvedOutput = outputLocation || ATHENA_OUTPUT;
+  if (!resolvedOutput) {
     throw new Error("ATHENA_OUTPUT (S3 path) is required for Athena queries");
   }
 
@@ -104,7 +109,7 @@ export async function runAthenaQuery(sql) {
       new StartQueryExecutionCommand({
         QueryString: sql,
         QueryExecutionContext: ATHENA_DB ? { Database: ATHENA_DB } : undefined,
-        ResultConfiguration: { OutputLocation: ATHENA_OUTPUT },
+        ResultConfiguration: { OutputLocation: resolvedOutput },
         WorkGroup: ATHENA_WORKGROUP,
       })
     );

@@ -27,6 +27,9 @@ const ATHENA_DAILY_SCORES_TABLE = sanitizeIdentifier(
 const DAILY_SCORES_S3_PATH =
   process.env.DAILY_SCORES_S3_PATH ||
   "s3://cloud-2006-bucket-vf6xtl9u/outputs/daily_scores/";
+const DAILY_TOP_ATHENA_OUTPUT =
+  process.env.DAILY_TOP_ATHENA_OUTPUT ||
+  "s3://cloud-2006-bucket-vf6xtl9u/data-for-daily-top-5/";
 const DAILY_SCORES_S3_MAX_KEYS = 200;
 const S3_SELECT_ENABLE = true;
 
@@ -518,7 +521,9 @@ router.get("/daily-top5", async (_req, res) => {
           ORDER BY avg_score DESC, review_count DESC
           LIMIT 5;
         `;
-        const athenaRows = await runAthenaQuery(athenaSql);
+        const athenaRows = await runAthenaQuery(athenaSql, {
+          outputLocation: DAILY_TOP_ATHENA_OUTPUT,
+        });
 
         rows = await buildDailyTopResponse(
           (athenaRows || []).map((row) => ({

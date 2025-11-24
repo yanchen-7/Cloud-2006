@@ -7,7 +7,8 @@ const MAX_MARKERS = 40
 export default function Explore() {
   const mapRef = useRef(null)
   const markersRef = useRef([])
-  const markerByIdRef = useRef(new Map())   // ✅ map of place_id -> Leaflet marker
+  const markerByIdRef = useRef(new Map()) // map of place_id -> Leaflet marker
+  const highlightMarkerRef = useRef(null)
   const iconsRef = useRef(null)
 
   const [places, setPlaces] = useState([])
@@ -15,11 +16,12 @@ export default function Explore() {
   const [showSavedOnly, setShowSavedOnly] = useState(false)
   const [savedPlaceIds, setSavedPlaceIds] = useState(() => new Set())
   const [selectedPlace, setSelectedPlace] = useState(null)
+  const [focusPlaceId, setFocusPlaceId] = useState(null)
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const [favouritesLoaded, setFavouritesLoaded] = useState(false)
-
-  // ✅ recommendations state
+  const [dailyTop, setDailyTop] = useState([])
+  const [dailyTopError, setDailyTopError] = useState('')
   const [recommendations, setRecommendations] = useState([])
   const [recsLoading, setRecsLoading] = useState(false)
 
@@ -89,6 +91,24 @@ export default function Explore() {
   }, [loadPlaces])
 
   useEffect(() => {
+    async function loadDailyTop() {
+      try {
+        const res = await fetch('/api/places/daily-top5')
+        if (!res.ok) throw new Error('Failed to load daily top list')
+        const data = await res.json()
+        const list = Array.isArray(data) ? data.slice(0, 3) : []
+        setDailyTop(list)
+        setDailyTopError(list.length ? '' : 'No daily scores available.')
+      } catch (err) {
+        console.error(err)
+        setDailyTop([])
+        setDailyTopError('Unable to load daily top places right now.')
+      }
+    }
+    loadDailyTop()
+  }, [])
+
+  useEffect(() => {
     if (mapRef.current || typeof L === 'undefined') return
     const map = L.map('exploreMap', { zoomControl: true }).setView(
       [SENTOSA.lat, SENTOSA.lng],
@@ -105,7 +125,7 @@ export default function Explore() {
     }
   }, [])
 
-  // ✅ NEW helper: fly to marker when clicking a recommendation
+  // fly to marker when clicking a recommendation or focused place
   const focusMarker = useCallback((place) => {
     if (!place?.place_id || !mapRef.current) return
     const pid = String(place.place_id).trim()
@@ -114,11 +134,9 @@ export default function Explore() {
     if (marker) {
       const latLng = marker.getLatLng()
       mapRef.current.flyTo(latLng, 16, { animate: true, duration: 0.8 })
-      if (marker.openPopup) marker.openPopup()
       return
     }
 
-    // fallback if marker not currently drawn (e.g., filtered out)
     const lat = Number(place.latitude)
     const lng = Number(place.longitude)
     if (Number.isFinite(lat) && Number.isFinite(lng)) {
@@ -126,22 +144,23 @@ export default function Explore() {
     }
   }, [])
 
-  // fetch place details + recommendations
-  const handleSelectPlace = useCallback(async place => {
+  // fetch place details + recommendations (supports focus mode)
+  const handleSelectPlace = useCallback(async (place, { focus = false } = {}) => {
     if (!place) {
       setSelectedPlace(null)
+      setFocusPlaceId(null)
       setRecommendations([])
+      setRecsLoading(false)
       return
     }
 
     const placeId = place.place_id
     setSelectedPlace(place)
+    setFocusPlaceId(focus ? placeId : null)
 
     // 1) load full details
     try {
-      const response = await fetch(
-        `/api/places/${encodeURIComponent(placeId)}`
-      )
+      const response = await fetch(`/api/places/${encodeURIComponent(placeId)}`)
       if (response.ok) {
         const details = await response.json()
         setSelectedPlace(current => {
@@ -156,9 +175,7 @@ export default function Explore() {
     // 2) load recommendations
     setRecsLoading(true)
     try {
-      const recRes = await fetch(
-        `/api/places/${encodeURIComponent(placeId)}/recommendations?limit=8`
-      )
+      const recRes = await fetch(`/api/places/${encodeURIComponent(placeId)}/recommendations?limit=8`)
       if (recRes.ok) {
         const recData = await recRes.json()
         setRecommendations(recData.recommendations || [])
@@ -214,6 +231,50 @@ export default function Explore() {
     [savedPlaceIds]
   )
 
+  const handleDailyTopSelect = useCallback(
+    (item) => {
+      const p = item?.place;
+      if (!p?.place_id) return;
+
+      const lat = Number(p.latitude);
+      const lng = Number(p.longitude);
+
+      if (mapRef.current && Number.isFinite(lat) && Number.isFinite(lng)) {
+        mapRef.current.setView([lat, lng], Math.max(mapRef.current.getZoom(), 15));
+      }
+
+      handleSelectPlace(
+        {
+          place_id: p.place_id,
+          name: p.name || p.place_id,
+          formatted_address: p.formatted_address || p.address,
+          address: p.address,
+          latitude: p.latitude,
+          longitude: p.longitude,
+          category: p.category,
+          rating: p.rating,
+          price_level: p.price_level,
+          opening_hours: p.opening_hours,
+          website: p.website,
+        },
+        { focus: true }
+      );
+    },
+    [handleSelectPlace]
+  );
+
+  const handleDailyTopKeyDown = useCallback(
+    (event, item) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault();
+        handleDailyTopSelect(item);
+      }
+    },
+    [handleDailyTopSelect]
+  );
+
+
+
   const categories = useMemo(() => {
     const list = Array.isArray(places) ? places : []
     const set = new Set()
@@ -241,10 +302,12 @@ export default function Explore() {
 
     markersRef.current.forEach(marker => marker.remove())
     markersRef.current = []
+    markerByIdRef.current.clear()
+
+    // If focusing on a single place, skip rendering the full set
+    if (focusPlaceId) return
 
     if (!filteredPlaces.length) return
-
-    markerByIdRef.current.clear()  // ✅ clear old id->marker map
 
     filteredPlaces.forEach(place => {
       const lat = Number(place?.latitude)
@@ -258,15 +321,16 @@ export default function Explore() {
       }).addTo(mapRef.current)
 
       const pid = String(place.place_id).trim()
-      markerByIdRef.current.set(pid, marker)  // ✅ store marker
+      markerByIdRef.current.set(pid, marker)
 
       marker.on('click', () => handleSelectPlace(place))
       markersRef.current.push(marker)
     })
-  }, [filteredPlaces, savedPlaceIds, favouritesLoaded, icons, handleSelectPlace])
+  }, [filteredPlaces, focusPlaceId, savedPlaceIds, favouritesLoaded, icons, handleSelectPlace])
 
   useEffect(() => {
     if (!mapRef.current) return
+    if (focusPlaceId) return
     if (!filteredPlaces.length) {
       mapRef.current.setView([SENTOSA.lat, SENTOSA.lng], 12)
       return
@@ -281,15 +345,39 @@ export default function Explore() {
     }
   }, [filteredPlaces])
 
-  const handleItemKeyDown = useCallback(
-    (event, place) => {
-      if (event.key === 'Enter' || event.key === ' ') {
-        event.preventDefault()
-        handleSelectPlace(place)
-      }
-    },
-    [handleSelectPlace]
-  )
+  useEffect(() => {
+    // Keep a dedicated highlight marker for the selected place
+    const map = mapRef.current
+    const icons = iconsRef.current
+    if (!map) return
+
+    // Clear previous highlight marker
+    if (highlightMarkerRef.current) {
+      highlightMarkerRef.current.remove()
+      highlightMarkerRef.current = null
+    }
+
+    if (!selectedPlace) return
+
+    const lat = Number(selectedPlace?.latitude)
+    const lng = Number(selectedPlace?.longitude)
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return
+
+    const isSaved = selectedPlace?.place_id
+      ? savedPlaceIds.has(String(selectedPlace.place_id).trim())
+      : false
+    const icon = icons?.[isSaved ? 'saved' : 'default']
+
+    const marker = L.marker([lat, lng], icon ? { icon } : undefined).addTo(map)
+    highlightMarkerRef.current = marker
+  }, [selectedPlace, savedPlaceIds])
+
+  const handleItemKeyDown = useCallback((event, place) => {
+    if (event.key === 'Enter' || event.key === ' ') {
+      event.preventDefault()
+      handleSelectPlace(place)
+    }
+  }, [handleSelectPlace])
 
   const isSelectedSaved = !!(
     selectedPlace && savedPlaceIds.has(String(selectedPlace.place_id).trim())
@@ -328,6 +416,64 @@ export default function Explore() {
             </div>
           </div>
         </div>
+        <div className="daily-top">
+          <div className="daily-top-header" style={{ textAlign: 'center' }}>
+            <h2>Daily Top 3 (AI score)</h2>
+          </div>
+          <div
+            className="daily-top-grid"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
+              gap: '1rem',
+              alignItems: 'stretch',
+            }}
+          >
+            {dailyTop.length ? (
+              dailyTop.map(item => (
+                <article
+                  key={item.place?.place_id || item.rank}
+                  className="card daily-top-card"
+                  style={{
+                    width: '100%',
+                    height: '100%',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: '0.5rem',
+                  }}
+                  role="button"
+                  tabIndex={0}
+                  onClick={() => handleDailyTopSelect(item)}
+                  onKeyDown={(event) => handleDailyTopKeyDown(event, item)}
+                >
+                  <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '0.5rem', alignItems: 'center' }}>
+                    <span className="badge rating">#{item.rank || '--'}</span>
+                    <span className="badge muted">{item.review_count || 0} reviews</span>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+                    <h3>{item.place?.name || item.place?.place_id || 'Unknown place'}</h3>
+                    <p className="muted">{item.place?.formatted_address || item.place?.address || 'Address not available'}</p>
+                  </div>
+                  <div
+                    className="daily-top-card__meta"
+                    style={{
+                      marginTop: 'auto',
+                      display: 'flex',
+                      justifyContent: 'flex-end',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                    }}
+                  >
+                    <span className="badge rating"><i className="fas fa-star" aria-hidden="true"></i> {formatRating(item.place?.rating)}</span>
+                    <span className="badge status" data-state="open">AI score: {formatSentiment(item.avg_sentiment)}</span>
+                  </div>
+                </article>
+              ))
+            ) : (
+              <div className="panel-placeholder">{dailyTopError || 'Loading daily top places...'}</div>
+            )}
+          </div>
+        </div>
       </section>
 
       <section className="explore-layout">
@@ -360,6 +506,7 @@ export default function Explore() {
               aria-label="Close details"
               onClick={() => {
                 setSelectedPlace(null)
+                setFocusPlaceId(null)
                 setRecommendations([])
               }}
             >
@@ -611,6 +758,12 @@ function formatPriceLevel(value) {
   if (!Number.isFinite(num) || num <= 0) return null
   const level = Math.min(4, Math.max(1, Math.round(num)))
   return '$'.repeat(level)
+}
+
+function formatSentiment(value) {
+  const num = Number(value)
+  if (!Number.isFinite(num)) return '--'
+  return num.toFixed(2)
 }
 
 function buildReviewsSummary(summary) {
