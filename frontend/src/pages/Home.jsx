@@ -27,7 +27,12 @@ export default function Home() {
   const [isLoadingPlaces, setIsLoadingPlaces] = useState(false)
   const [isLoadingRecommendations, setIsLoadingRecommendations] = useState(false)
   const [errorMessage, setErrorMessage] = useState('')
+  
+  // REVIEW SLIDER STATES
   const [reviewsExpanded, setReviewsExpanded] = useState(false)
+  const [currentReviewIndex, setCurrentReviewIndex] = useState(0)
+  const [isReviewHovered, setIsReviewHovered] = useState(false)
+
   const [userLocation, setUserLocation] = useState(null)
   const [isLocating, setIsLocating] = useState(false)
   const [locationError, setLocationError] = useState('')
@@ -254,18 +259,17 @@ export default function Home() {
     return Array.from(set).sort((a, b) => a.localeCompare(b, undefined, { sensitivity: 'base' }))
   }, [places])
 
-  // UPDATED: Logic now ensures the Selected Place is ALWAYS rendered on the map
   const filteredPlaces = useMemo(() => {
     const list = Array.isArray(places) ? places : []
     
-    // 1. Filter by Category & Limit (Standard logic)
+    // 1. Filter by Category & Limit
     const byCategory = selectedCategory 
       ? list.filter(place => place.category === selectedCategory) 
       : list.slice()
     
     const limited = byCategory.slice(0, MAX_MARKERS)
 
-    // 2. Ensure Saved Places are visible (Standard logic)
+    // 2. Ensure Saved Places are visible
     if (savedPlaces.size) {
       list.forEach(place => {
         if (savedPlaces.has(place.place_id) && !limited.find(item => item.place_id === place.place_id)) {
@@ -274,11 +278,10 @@ export default function Home() {
       })
     }
 
-    // 3. NEW FIX: Ensure Selected Place (from Top 5) is visible
+    // 3. Ensure Selected Place is visible
     if (selectedPlace) {
       const alreadyVisible = limited.find(p => p.place_id === selectedPlace.place_id)
       if (!alreadyVisible) {
-        // Only add if it has valid coordinates
         if (selectedPlace.latitude && selectedPlace.longitude) {
           limited.push(selectedPlace)
         }
@@ -508,38 +511,50 @@ export default function Home() {
 
   const mapHintMessage = errorMessage || locationError || (userLocation ? 'Tap a pin to see place details.' : 'Share your location and tap a pin to see place details.')
 
-  const selectedPlaceReviews = Array.isArray(selectedPlace?.reviews)
-    ? selectedPlace.reviews
-    : Array.isArray(selectedPlace?.user_reviews)
-    ? selectedPlace.user_reviews
-    : []
-  const visibleReviews = reviewsExpanded ? selectedPlaceReviews : selectedPlaceReviews.slice(0, REVIEW_PREVIEW_LIMIT)
-  const canToggleReviews = selectedPlaceReviews.length > REVIEW_PREVIEW_LIMIT
+  // --- REVIEW CAROUSEL LOGIC ---
 
-  const globalReviews = useMemo(() => {
-    const list = []
-    const source = Array.isArray(places) ? places : []
-    source.forEach(place => {
-      const reviews = Array.isArray(place?.reviews)
-        ? place.reviews
-        : Array.isArray(place?.user_reviews)
-        ? place.user_reviews
-        : []
-      reviews.forEach(review => {
-        list.push({
-          ...review,
-          placeName: place.name,
-          placeId: place.place_id,
-        })
-      })
-    })
-    list.sort((a, b) => {
-      const dateA = new Date(a.publish_time || a.time || 0).getTime()
-      const dateB = new Date(b.publish_time || b.time || 0).getTime()
-      return dateB - dateA
-    })
-    return list.slice(0, 6)
-  }, [places])
+  // 1. Reset index when selected place changes
+  useEffect(() => {
+    setCurrentReviewIndex(0)
+  }, [selectedPlace?.place_id])
+
+  // 2. Memoize all reviews for the current place
+  const selectedPlaceReviews = useMemo(() => {
+    if (!selectedPlace) return []
+    return Array.isArray(selectedPlace.reviews)
+      ? selectedPlace.reviews
+      : Array.isArray(selectedPlace.user_reviews)
+      ? selectedPlace.user_reviews
+      : []
+  }, [selectedPlace])
+
+  // 3. Determine visible reviews based on "Show More" state
+  const visibleReviews = useMemo(() => {
+    if (reviewsExpanded) return selectedPlaceReviews
+    return selectedPlaceReviews.slice(0, REVIEW_PREVIEW_LIMIT)
+  }, [selectedPlaceReviews, reviewsExpanded])
+
+  // 4. Auto-slide effect (2 seconds)
+  useEffect(() => {
+    if (visibleReviews.length <= 1 || isReviewHovered) return
+
+    const timer = setInterval(() => {
+      setCurrentReviewIndex(prev => (prev + 1) % visibleReviews.length)
+    }, 2000) // 2s interval
+
+    return () => clearInterval(timer)
+  }, [visibleReviews.length, isReviewHovered])
+
+  // 5. Manual Controls
+  const nextReview = () => {
+    setCurrentReviewIndex(prev => (prev + 1) % visibleReviews.length)
+  }
+
+  const prevReview = () => {
+    setCurrentReviewIndex(prev => (prev - 1 + visibleReviews.length) % visibleReviews.length)
+  }
+
+  // --- END REVIEW CAROUSEL LOGIC ---
 
   const categoryAverages = useMemo(() => {
     const map = new Map()
@@ -647,10 +662,6 @@ export default function Home() {
     <main className="page-content">
       <section className="top-row">
         <div className="card daily-top-five">
-          {/* UPDATED HEADER LAYOUT: 
-             - Block display allows stacking.
-             - Dropdown placed clearly below the text description with spacing.
-          */}
           <div className="card-header" style={{ display: 'block' }}>
             <div>
               <h2><i className="fas fa-robot" aria-hidden="true"></i> Top 10 by AI Sentiment</h2>
@@ -671,11 +682,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* UPDATED LIST LAYOUT:
-             - Fixed Max Height (~270px shows roughly 3.5 items)
-             - Scrollable (Overflow-Y)
-             - Padding right for scrollbar space
-          */}
           <ol className="daily-top-list" style={{ maxHeight: '320px', overflowY: 'auto', paddingRight: '0.5rem' }}>
             {dailyTopPlaces.length
               ? dailyTopPlaces.map((entry, index) => {
@@ -741,7 +747,6 @@ export default function Home() {
                     </div>
                   </div>
                   <div className="map-preview">
-                    {/* Intentionally left blank to avoid large blue category label */}
                   </div>
                 </div>
               )) : (
@@ -860,8 +865,6 @@ export default function Home() {
                   </div>
                 </dl>
 
-                <PlaceInsights placeId={selectedPlace.place_id} />
-
                 <section className="user-review" aria-labelledby="userReviewTitle">
                   <h4 id="userReviewTitle"><i className="fas fa-pen-to-square" aria-hidden="true"></i> Share Your Experience</h4>
                   {session?.authenticated ? (
@@ -951,41 +954,81 @@ export default function Home() {
             <span><i className="fas fa-location-crosshairs" aria-hidden="true"></i> You</span>
             <span><i className="fas fa-map-marker-alt" aria-hidden="true"></i> Selected Places</span>
           </div>
+
+          {/* MOVED: PlaceInsights now sits below the map/legend and above reviews */}
+          {selectedPlace && (
+             <PlaceInsights placeId={selectedPlace.place_id} />
+          )}
+
           <div className="map-reviews place-reviews" aria-labelledby="placeReviewsTitle">
             <div className="section-heading">
               <h4 id="placeReviewsTitle"><i className="fas fa-star-half-alt" aria-hidden="true"></i> Visitor Reviews</h4>
               <span className="badge muted" id="placeReviewsSummary">{summaryLabel || '--'}</span>
             </div>
+            
             {selectedPlace ? (
-              <>
-                <div className="reviews-stack" id="placeReviewsList">
-                  {visibleReviews.length ? visibleReviews.map(review => (
-                    <article
-                      key={`${selectedPlace.place_id}-${review.author_name}-${review.publish_time ?? review.time ?? Math.random()}`}
-                      className="review-card"
-                    >
-                      <div className="review-header">
-                        <span className="review-rating"><i className="fas fa-star" aria-hidden="true"></i> {formatRating(review?.rating)}</span>
-                        <span>{getReviewAuthor(review)}</span>
-                      </div>
-                      <span className="review-date">{formatDateLabel(review?.publish_time || review?.time)}</span>
-                      <p className="review-text">{formatReviewSnippet(review?.review_text || review?.text)}</p>
-                    </article>
-                  )) : (
-                    <div className="panel-placeholder">No reviews yet.</div>
-                  )}
-                </div>
-                {canToggleReviews ? (
-                  <button
-                    id="placeReviewsToggle"
-                    className="btn ghost"
-                    type="button"
-                    onClick={() => setReviewsExpanded(value => !value)}
+              visibleReviews.length > 0 ? (
+                <div 
+                  className="review-carousel"
+                  onMouseEnter={() => setIsReviewHovered(true)}
+                  onMouseLeave={() => setIsReviewHovered(false)}
+                >
+                  <div 
+                    className="review-track" 
+                    style={{ transform: `translateX(-${currentReviewIndex * 100}%)` }}
                   >
-                    {reviewsExpanded ? 'Show fewer reviews' : 'Show more reviews'}
-                  </button>
-                ) : null}
-              </>
+                    {visibleReviews.map((review, idx) => (
+                      <article
+                        key={`${selectedPlace.place_id}-rev-${idx}`}
+                        className="review-slide"
+                      >
+                        <div className="review-header">
+                          <span className="review-rating">
+                            {[...Array(5)].map((_, i) => (
+                              <i key={i} className={`fas fa-star ${i < Math.round(review.rating) ? '' : 'muted'}`} style={{opacity: i < Math.round(review.rating) ? 1 : 0.3}}></i>
+                            ))}
+                            <span style={{marginLeft: '6px', color:'#1f2933'}}>{formatRating(review?.rating)}</span>
+                          </span>
+                          <span>{getReviewAuthor(review)}</span>
+                        </div>
+                        <span className="review-date">{formatDateLabel(review?.publish_time || review?.time)}</span>
+                        <p className="review-text">{formatReviewSnippet(review?.review_text || review?.text, 250)}</p>
+                      </article>
+                    ))}
+                  </div>
+
+                  <div className="review-footer-controls">
+                    <div className="review-nav-btns">
+                      <button type="button" className="review-nav-btn" onClick={prevReview} aria-label="Previous review">
+                        <i className="fas fa-chevron-left"></i>
+                      </button>
+                      <button type="button" className="review-nav-btn" onClick={nextReview} aria-label="Next review">
+                        <i className="fas fa-chevron-right"></i>
+                      </button>
+                    </div>
+
+                    <span className="review-pagination-text">
+                      {currentReviewIndex + 1} / {visibleReviews.length}
+                    </span>
+
+                    {/* "Show More" Button Logic integrated into footer */}
+                    {selectedPlaceReviews.length > 5 && (
+                      <button
+                        type="button"
+                        className="review-toggle-link"
+                        onClick={() => {
+                          setReviewsExpanded(!reviewsExpanded)
+                          setCurrentReviewIndex(0) // Reset to start
+                        }}
+                      >
+                        {reviewsExpanded ? 'Show Less' : 'Load More'}
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ) : (
+                <div className="panel-placeholder">No reviews yet.</div>
+              )
             ) : (
               <div className="panel-placeholder">Select a place on the map to view its reviews.</div>
             )}

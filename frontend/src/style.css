@@ -614,6 +614,7 @@ p {
     display: flex;
     flex-direction: column;
     gap: 1rem;
+    min-width: 0;
 }
 
 .map-toolbar {
@@ -660,7 +661,7 @@ p {
 }
 
 .map-reviews {
-    margin-top: 1.5rem;
+    margin-top: 0;
 }
 
 .site-footer {
@@ -1274,4 +1275,176 @@ p {
   font-size: 0.85rem;
   color: #666;
   margin: 4px 0 10px;
+}
+
+/* --- Review Carousel Styles --- */
+.review-carousel {
+    position: relative;
+    overflow: hidden;
+    background: rgba(248, 250, 252, 0.6);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 0; /* Padding moved to inner slides */
+}
+
+.review-track {
+    display: flex;
+    transition: transform 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+    width: 100%;
+}
+
+.review-slide {
+    flex: 0 0 100%;
+    min-width: 100%;
+    padding: 1.25rem;
+    box-sizing: border-box;
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+}
+
+/* Adjust existing review card styles for carousel context */
+.review-slide .review-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-weight: 600;
+}
+
+.review-slide .review-rating {
+    color: #d97706;
+}
+
+.review-slide .review-date {
+    font-size: 0.8rem;
+    color: var(--muted);
+}
+
+.review-slide .review-text {
+    font-size: 0.95rem;
+    line-height: 1.5;
+    color: var(--text);
+    margin: 0.5rem 0 0;
+}
+
+/* Controls at the bottom of the review card */
+.review-footer-controls {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.75rem 1.25rem;
+    background: rgba(255, 255, 255, 0.5);
+    border-top: 1px solid var(--border);
+}
+
+.review-nav-btns {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.review-nav-btn {
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    border: 1px solid var(--border);
+    background: #fff;
+    color: var(--primary);
+    display: grid;
+    place-items: center;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.review-nav-btn:hover {
+    background: var(--primary);
+    color: #fff;
+    border-color: var(--primary);
+}
+
+.review-pagination-text {
+    font-size: 0.8rem;
+    color: var(--muted);
+    font-weight: 500;
+}
+
+/* Toggle link style */
+.review-toggle-link {
+    background: none;
+    border: none;
+    color: var(--primary);
+    font-size: 0.85rem;
+    font-weight: 600;
+    cursor: pointer;
+    text-decoration: underline;
+    padding: 0;
+}
+
+/* ... (keep your existing CSS above this) ... */
+
+/* --- AI Insights Horizontal Layout --- */
+.ai-insights-panel {
+    margin-top: 1.5rem;
+    padding: 1.25rem 1.5rem;
+    background: rgba(45, 108, 223, 0.04);
+    border: 1px solid rgba(45, 108, 223, 0.12);
+    border-radius: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+}
+
+.ai-header h4 {
+    margin: 0;
+    font-size: 1rem;
+    color: var(--text);
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+}
+
+.ai-grid {
+    display: grid;
+    /* On wide screens, show 2 columns side-by-side. On mobile, stack them. */
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 2rem;
+    align-items: start;
+}
+
+.ai-category-title {
+    font-size: 0.85rem;
+    font-weight: 700;
+    margin-bottom: 0.6rem;
+    text-transform: uppercase;
+    letter-spacing: 0.02em;
+}
+
+.ai-tags-row {
+    display: flex;
+    flex-wrap: wrap; /* This ensures badges wrap nicely */
+    gap: 0.5rem;
+}
+
+/* Specific styling for the AI score in tags */
+.ai-score {
+    opacity: 0.7;
+    font-size: 0.8em;
+    margin-left: 4px;
+    font-weight: 500;
+}
+
+.ai-footer {
+    font-size: 0.75rem;
+    color: var(--muted);
+    text-align: right;
+    border-top: 1px solid rgba(45, 108, 223, 0.1);
+    padding-top: 0.75rem;
+    margin-top: 0.25rem;
+}
+
+/* Mobile tweak for AI panel inside map-wrapper */
+@media (max-width: 640px) {
+    .ai-grid {
+        grid-template-columns: 1fr; /* Force stack on small mobile */
+        gap: 1.25rem;
+    }
 }
