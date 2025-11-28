@@ -5,6 +5,8 @@ import {
   GetQueryResultsCommand,
 } from "@aws-sdk/client-athena";
 
+// Default S3 location for Athena query results.
+// This is used as a fallback for queries that don't specify a custom output location.
 const REGION = process.env.AWS_REGION || process.env.AWS_DEFAULT_REGION || "us-east-1";
 const ATHENA_DB = process.env.ATHENA_DB || process.env.ATHENA_DATABASE || "cloud_2006_recommender";
 const ATHENA_OUTPUT =

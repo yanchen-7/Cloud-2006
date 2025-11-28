@@ -96,7 +96,7 @@ export default function Explore() {
         const res = await fetch('/api/places/daily-top5')
         if (!res.ok) throw new Error('Failed to load daily top list')
         const data = await res.json()
-        const list = Array.isArray(data) ? data.slice(0, 3) : []
+        const list = Array.isArray(data) ? data.slice(0, 5) : []
         setDailyTop(list)
         setDailyTopError(list.length ? '' : 'No daily scores available.')
       } catch (err) {
@@ -402,79 +402,91 @@ export default function Explore() {
   return (
     <div className="explore">
       <section className="explore-hero">
-        <div className="card">
-          <div className="card-header">
-            <div>
-              <h1>
-                <i className="fas fa-compass" aria-hidden="true"></i> Explore
-                Singapore
-              </h1>
-              <p>
-                Filter by interests, review top spots and revisit favourites in a
-                single map view.
+  <div className="daily-top">
+    <div className="daily-top-header" style={{ textAlign: 'center' }}>
+      <h2>Daily Top 5 (AI score)</h2>
+    </div>
+
+    <div
+      className="daily-top-grid"
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(5, minmax(0, 1fr))', // 5 cards in one row
+        gap: '1rem',
+        alignItems: 'stretch',
+      }}
+    >
+      {dailyTop.length ? (
+        dailyTop.map(item => (
+          <article
+            key={item.place?.place_id || item.rank}
+            className="card daily-top-card"
+            style={{
+              width: '100%',
+              height: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.5rem',
+            }}
+            role="button"
+            tabIndex={0}
+            onClick={() => handleDailyTopSelect(item)}
+            onKeyDown={(event) => handleDailyTopKeyDown(event, item)}
+          >
+            <div
+              style={{
+                display: 'flex',
+                justifyContent: 'flex-start',
+                gap: '0.5rem',
+                alignItems: 'center',
+              }}
+            >
+              <span className="badge rating">#{item.rank || '--'}</span>
+              <span className="badge muted">
+                {item.review_count || 0} reviews
+              </span>
+            </div>
+
+            <div
+              style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}
+            >
+              <h3>{item.place?.name || item.place?.place_id || 'Unknown place'}</h3>
+              <p className="muted">
+                {item.place?.formatted_address ||
+                  item.place?.address ||
+                  'Address not available'}
               </p>
             </div>
-          </div>
+
+            <div
+              className="daily-top-card__meta"
+              style={{
+                marginTop: 'auto',
+                display: 'flex',
+                justifyContent: 'flex-end',
+                alignItems: 'center',
+                gap: '0.5rem',
+              }}
+            >
+              <span className="badge rating">
+                <i className="fas fa-star" aria-hidden="true"></i>{' '}
+                {formatRating(item.place?.rating)}
+              </span>
+              <span className="badge status" data-state="open">
+                AI score: {formatSentiment(item.avg_sentiment)}
+              </span>
+            </div>
+          </article>
+        ))
+      ) : (
+        <div className="panel-placeholder">
+          {dailyTopError || 'Loading daily top places...'}
         </div>
-        <div className="daily-top">
-          <div className="daily-top-header" style={{ textAlign: 'center' }}>
-            <h2>Daily Top 3 (AI score)</h2>
-          </div>
-          <div
-            className="daily-top-grid"
-            style={{
-              display: 'grid',
-              gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
-              gap: '1rem',
-              alignItems: 'stretch',
-            }}
-          >
-            {dailyTop.length ? (
-              dailyTop.map(item => (
-                <article
-                  key={item.place?.place_id || item.rank}
-                  className="card daily-top-card"
-                  style={{
-                    width: '100%',
-                    height: '100%',
-                    display: 'flex',
-                    flexDirection: 'column',
-                    gap: '0.5rem',
-                  }}
-                  role="button"
-                  tabIndex={0}
-                  onClick={() => handleDailyTopSelect(item)}
-                  onKeyDown={(event) => handleDailyTopKeyDown(event, item)}
-                >
-                  <div style={{ display: 'flex', justifyContent: 'flex-start', gap: '0.5rem', alignItems: 'center' }}>
-                    <span className="badge rating">#{item.rank || '--'}</span>
-                    <span className="badge muted">{item.review_count || 0} reviews</span>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
-                    <h3>{item.place?.name || item.place?.place_id || 'Unknown place'}</h3>
-                    <p className="muted">{item.place?.formatted_address || item.place?.address || 'Address not available'}</p>
-                  </div>
-                  <div
-                    className="daily-top-card__meta"
-                    style={{
-                      marginTop: 'auto',
-                      display: 'flex',
-                      justifyContent: 'flex-end',
-                      alignItems: 'center',
-                      gap: '0.5rem',
-                    }}
-                  >
-                    <span className="badge rating"><i className="fas fa-star" aria-hidden="true"></i> {formatRating(item.place?.rating)}</span>
-                    <span className="badge status" data-state="open">AI score: {formatSentiment(item.avg_sentiment)}</span>
-                  </div>
-                </article>
-              ))
-            ) : (
-              <div className="panel-placeholder">{dailyTopError || 'Loading daily top places...'}</div>
-            )}
-          </div>
-        </div>
-      </section>
+      )}
+    </div>
+  </div>
+</section>
+
 
       <section className="explore-layout">
         <div className="explore-map-wrapper">
